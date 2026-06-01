@@ -1,0 +1,201 @@
+:root {
+    --sydra-primary: #1e5671;
+    --sydra-primary-600: #1a4f67;
+    --sydra-primary-300: #5f9ec0;
+    --sydra-bg: #f2f6fb;
+    --sydra-card: #ffffff;
+}
+
+body {
+    background: radial-gradient(circle at top right, #dcecff 0%, var(--sydra-bg) 45%, #eef3f8 100%);
+    min-height: 100vh;
+}
+
+.top-header {
+    background: #ffffffd9;
+    backdrop-filter: blur(5px);
+    border-bottom: 1px solid #d7e5f3;
+}
+
+.brand-mini {
+    font-weight: 700;
+    color: var(--sydra-primary);
+    font-size: 0.95rem;
+}
+
+.lang-compact .btn,
+.btn-xs {
+    font-size: 0.72rem;
+    line-height: 1;
+}
+
+.brand-link {
+    background: linear-gradient(155deg, var(--sydra-primary), var(--sydra-primary-600));
+    color: #fff !important;
+    border-bottom: 0 !important;
+    padding-top: 0.9rem !important;
+    padding-bottom: 0.9rem !important;
+}
+
+.brand-title {
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1.05;
+}
+
+.brand-subtitle {
+    display: block;
+    font-size: 0.64rem;
+    letter-spacing: 0.02em;
+    opacity: 0.9;
+}
+
+.main-sidebar {
+    box-shadow: 0 14px 28px rgba(11, 40, 58, 0.26) !important;
+}
+
+.nav-sidebar .nav-link {
+    border-radius: 10px;
+    margin: 2px 8px;
+    font-size: 0.92rem;
+}
+
+.nav-sidebar .nav-icon {
+    margin-right: 0.45rem;
+}
+
+.nav-sidebar .nav-link.active,
+.nav-sidebar .nav-link:hover {
+    background-color: rgba(30, 86, 113, 0.25) !important;
+}
+
+.btn-sydra {
+    background-color: var(--sydra-primary);
+    border-color: var(--sydra-primary);
+    color: #fff;
+}
+
+.btn-sydra:hover,
+.btn-sydra:focus {
+    background-color: var(--sydra-primary-600);
+    border-color: var(--sydra-primary-600);
+    color: #fff;
+}
+
+.btn-primary {
+    background-color: var(--sydra-primary);
+    border-color: var(--sydra-primary);
+}
+
+.btn-primary:hover,
+.btn-primary:focus {
+    background-color: var(--sydra-primary-600);
+    border-color: var(--sydra-primary-600);
+    color: #fff;
+}
+
+.card-soft {
+    background: var(--sydra-card);
+    border-radius: 14px;
+    box-shadow: 0 8px 26px rgba(5, 31, 48, 0.08);
+}
+
+.report-map {
+    width: 100%;
+    height: 360px;
+    border-radius: 10px;
+    background: #e6edf1;
+}
+
+.auth-shell {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+.auth-language-switch {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+}
+
+.help-panel {
+    border: 1px solid #d5e1ef;
+    background: linear-gradient(180deg, #f7fbff, #eef5ff);
+    border-radius: 12px;
+    padding: 1rem;
+}
+
+.content-wrapper {
+    background: transparent;
+}
+
+.public-header {
+    position: sticky;
+    top: 0;
+    z-index: 1020;
+}
+
+.card {
+    border-radius: 12px;
+}
+
+.kpi-engaging {
+    border-left: 4px solid var(--sydra-primary);
+    box-shadow: 0 8px 18px rgba(30, 86, 113, 0.1);
+}
+
+.page-loader {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(255, 255, 255, 0.88);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.25s ease, visibility 0.25s ease;
+}
+
+.page-loader.hidden {
+    opacity: 0;
+    visibility: hidden;
+}
+
+.loader-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    color: var(--sydra-primary);
+}
+
+.loader-text {
+    font-size: 0.92rem;
+    font-weight: 600;
+    text-align: center;
+    max-width: 320px;
+}
+
+.main-footer {
+    background: #f7fbff;
+    border-top: 1px solid #d8e5f3;
+    color: #5a6b78;
+}
+
+@media (max-width: 768px) {
+    .report-map {
+        height: 300px;
+    }
+}
+
+.suggestions {
+    z-index: 20;
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(100% + 2px);
+    max-height: 220px;
+    overflow: auto;
+}

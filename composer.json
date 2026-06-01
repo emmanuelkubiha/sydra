@@ -1,0 +1,16 @@
+{
+  "name": "sydra/monitoring",
+  "description": "SyDRA - Systeme de Documentation, Rapportage et Alerte",
+  "type": "project",
+  "require": {
+    "php": ">=8.0",
+    "phpmailer/phpmailer": "^6.9",
+    "tecnickcom/tcpdf": "^6.7",
+    "phpoffice/phpspreadsheet": "^2.1"
+  },
+  "autoload": {
+    "psr-4": {
+      "App\\": "app/"
+    }
+  }
+}
