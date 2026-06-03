@@ -1,0 +1,7 @@
+.DS_Store
+.env
+.env.
+vendor/
+composer.phar
+composer-setup.php
+uploads/

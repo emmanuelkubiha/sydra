@@ -2,11 +2,27 @@
 
 declare(strict_types=1);
 
-return [
-    'host' => env('DB_HOST', '127.0.0.1'),
-    'port' => env('DB_PORT', '3306'),
-    'name' => env('DB_NAME', 'sydra'),
-    'user' => env('DB_USER', 'root'),
-    'pass' => env('DB_PASS', ''),
-    'charset' => 'utf8mb4',
-];
+if (!function_exists('db')) {
+    function db(array $config): PDO
+    {
+        static $pdo = null;
+
+        if ($pdo instanceof PDO) {
+            return $pdo;
+        }
+
+        $dsn = sprintf(
+            'mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4',
+            $config['db']['host'],
+            $config['db']['port'],
+            $config['db']['name']
+        );
+
+        $pdo = new PDO($dsn, $config['db']['user'], $config['db']['pass'], [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        ]);
+
+        return $pdo;
+    }
+}
