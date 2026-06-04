@@ -15,6 +15,9 @@ if (!function_exists('csrf_token')) {
 
 <div class="login-grid">
     <div class="card">
+        <div class="login-logo-wrap">
+            <img class="login-logo" src="assets/img/sydra-logo/BLEU-PRIMARY-SYDRA-LOGO.png" alt="Logo SyDRA" height="40">
+        </div>
         <h2><?= htmlspecialchars(t('login.secure_title'), ENT_QUOTES, 'UTF-8'); ?></h2>
         <form method="post" action="?page=connexion">
             <input type="hidden" name="action" value="login">
@@ -44,9 +47,9 @@ if (!function_exists('csrf_token')) {
                 <li>colead.cluster@sydra.local (CLUSTER_CO_LEAD)</li>
                 <li>reporter@sydra.local (REPORTER)</li>
             </ul>
-            <p class="muted">Si la connexion echoue, utilisez "Mot de passe oublie ?" sous le formulaire.</p>
+            <p class="muted">Si la connexion échoue, utilisez "Mot de passe oublié ?" sous le formulaire.</p>
 
-            <p class="inline-hint">Si le probleme persiste, contacter l'admin: <strong><?= htmlspecialchars((string) ($config['support_email'] ?? $config['mail']['from'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></strong></p>
+            <p class="inline-hint">Si le problème persiste, contactez l'admin: <strong><?= htmlspecialchars((string) ($config['support_email'] ?? $config['mail']['from'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></strong></p>
         </details>
     </div>
 </div>

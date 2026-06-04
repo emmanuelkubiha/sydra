@@ -14,13 +14,13 @@ if (!function_exists('sendAppMail')) {
         $secure = strtolower((string) ($config['mail']['smtp_secure'] ?? 'tls'));
 
         if ($host === '') {
-            $issues[] = 'SMTP non configuré: SMTP_HOST est vide.';
+            $issues[] = 'SMTP non configure: SMTP_HOST est vide.';
         }
         if ($port <= 0) {
             $issues[] = 'SMTP_PORT manquant ou invalide.';
         }
         if (!in_array($secure, ['tls', 'ssl', 'none'], true)) {
-            $issues[] = 'SMTP_SECURE doit être tls, ssl ou none.';
+            $issues[] = 'SMTP_SECURE doit etre tls, ssl ou none.';
         }
         if ($auth && $user === '') {
             $issues[] = 'SMTP_USER manquant alors que SMTP_AUTH=true.';
@@ -32,7 +32,31 @@ if (!function_exists('sendAppMail')) {
         return $issues;
     }
 
-    function sendAppMailDetailed(array $config, string $to, string $subject, string $body): array
+    /**
+     * @param string|array<int, string> $emails
+     * @return array<int, string>
+     */
+    function normalizeEmailList(string|array $emails): array
+    {
+        $input = is_array($emails) ? $emails : [$emails];
+        $out = [];
+
+        foreach ($input as $email) {
+            $value = strtolower(trim((string) $email));
+            if ($value === '' || !filter_var($value, FILTER_VALIDATE_EMAIL)) {
+                continue;
+            }
+            $out[$value] = $value;
+        }
+
+        return array_values($out);
+    }
+
+    /**
+     * @param array<int, string> $to
+     * @param array<int, string> $cc
+     */
+    function sendAppMailMultiDetailed(array $config, array $to, array $cc, string $subject, string $body, bool $isHtml = false): array
     {
         $issues = smtpConfigIssues($config);
         if ($issues !== []) {
@@ -42,8 +66,15 @@ if (!function_exists('sendAppMail')) {
         if (!class_exists('PHPMailer\\PHPMailer\\PHPMailer')) {
             return [
                 'success' => false,
-                'error' => 'SMTP configuré mais PHPMailer est manquant. Installez PHPMailer via Composer (composer require phpmailer/phpmailer) et chargez vendor/autoload.php.',
+                'error' => 'SMTP configure mais PHPMailer est manquant. Installez PHPMailer via Composer (composer require phpmailer/phpmailer) et chargez vendor/autoload.php.',
             ];
+        }
+
+        $to = normalizeEmailList($to);
+        $cc = normalizeEmailList($cc);
+
+        if ($to === []) {
+            return ['success' => false, 'error' => 'Aucun destinataire email valide.'];
         }
 
         $class = 'PHPMailer\\PHPMailer\\PHPMailer';
@@ -68,26 +99,204 @@ if (!function_exists('sendAppMail')) {
             }
 
             $mail->setFrom((string) $config['mail']['from'], (string) $config['mail']['from_name']);
-            $mail->addAddress($to);
+
+            foreach ($to as $email) {
+                $mail->addAddress($email);
+            }
+            foreach ($cc as $email) {
+                if (!in_array($email, $to, true)) {
+                    $mail->addCC($email);
+                }
+            }
+
             $mail->CharSet = 'UTF-8';
-            $mail->isHTML(false);
+            $mail->isHTML($isHtml);
             $mail->Subject = $subject;
             $mail->Body = $body;
+
+            if ($isHtml) {
+                $mail->AltBody = trim(strip_tags(str_replace(['<br>', '<br/>', '<br />'], "\n", $body)));
+            }
 
             $sent = $mail->send();
             if ($sent) {
                 return ['success' => true, 'error' => ''];
             }
 
-            return ['success' => false, 'error' => 'Envoi SMTP échoué sans message détaillé.'];
+            return ['success' => false, 'error' => 'Envoi SMTP echoue sans message detaille.'];
         } catch (Throwable $e) {
             return ['success' => false, 'error' => trim((string) $e->getMessage())];
         }
+    }
+
+    function sendAppMailDetailed(array $config, string $to, string $subject, string $body, bool $isHtml = false): array
+    {
+        return sendAppMailMultiDetailed($config, [$to], [], $subject, $body, $isHtml);
     }
 
     function sendAppMail(array $config, string $to, string $subject, string $body): bool
     {
         $result = sendAppMailDetailed($config, $to, $subject, $body);
         return (bool) ($result['success'] ?? false);
+    }
+
+    function sendAppMailHtml(array $config, string $to, string $subject, string $htmlBody): bool
+    {
+        $result = sendAppMailDetailed($config, $to, $subject, $htmlBody, true);
+        return (bool) ($result['success'] ?? false);
+    }
+
+    function mailRoleStorageMode(array $config): string
+    {
+        $pdo = db($config);
+
+        $roleColumn = $pdo->query("SHOW COLUMNS FROM users LIKE 'role'")->fetch();
+        if (is_array($roleColumn)) {
+            return 'role_column';
+        }
+
+        $roleIdColumn = $pdo->query("SHOW COLUMNS FROM users LIKE 'role_id'")->fetch();
+        if (is_array($roleIdColumn)) {
+            return 'role_fk';
+        }
+
+        return 'role_column';
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    function getLeadAndAdminEmails(array $config): array
+    {
+        $pdo = db($config);
+        $mode = mailRoleStorageMode($config);
+
+        if ($mode === 'role_fk') {
+            $stmt = $pdo->query("SELECT DISTINCT u.email
+                                 FROM users u
+                                 LEFT JOIN roles r ON r.id = u.role_id
+                                 WHERE u.is_active = 1
+                                   AND LOWER(COALESCE(u.statut, 'Actif')) <> 'bloque'
+                                   AND COALESCE(r.code, '') IN ('ADMIN', 'CLUSTER_LEADER', 'LEAD_GTMP', 'GTMP_LEAD')");
+        } else {
+            $stmt = $pdo->query("SELECT DISTINCT email
+                                 FROM users
+                                 WHERE is_active = 1
+                                   AND LOWER(COALESCE(statut, 'Actif')) <> 'bloque'
+                                   AND role IN ('ADMIN', 'CLUSTER_LEADER', 'LEAD_GTMP', 'GTMP_LEAD')");
+        }
+
+        $rows = $stmt->fetchAll();
+        $emails = [];
+        foreach ($rows as $row) {
+            $email = strtolower(trim((string) ($row['email'] ?? '')));
+            if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $emails[$email] = $email;
+            }
+        }
+
+        return array_values($emails);
+    }
+
+    /**
+     * @param array<string, mixed> $donnees
+     * @return array{subject:string, html:string}
+     */
+    function renderNotificationTemplate(array $config, string $type, array $donnees): array
+    {
+        $templates = [
+            'creation_compte' => 'creation_compte.php',
+            'reinitialisation_mdp' => 'reinitialisation_mdp.php',
+            'nouvelle_alerte_soumise' => 'nouvelle_alerte_soumise.php',
+            'alerte_validee' => 'alerte_validee.php',
+            'demande_correction' => 'demande_correction.php',
+            'rappel_validation_lead' => 'rappel_validation_lead.php',
+            'alerte_urgente_critique' => 'alerte_urgente_critique.php',
+        ];
+
+        if (!isset($templates[$type])) {
+            throw new InvalidArgumentException('Type de notification inconnu: ' . $type);
+        }
+
+        $mailDir = dirname(__DIR__) . '/mail';
+        $layoutFile = $mailDir . '/layout.php';
+        $templateFile = $mailDir . '/' . $templates[$type];
+
+        if (!is_file($layoutFile) || !is_file($templateFile)) {
+            throw new RuntimeException('Template email introuvable dans le dossier mail/.');
+        }
+
+        require_once $layoutFile;
+
+        $template = require $templateFile;
+        if (!is_array($template)) {
+            throw new RuntimeException('Le template email doit retourner un tableau.');
+        }
+
+        $mailMeta = [
+            'subject' => (string) ($template['subject'] ?? 'Notification SyDRA'),
+            'title' => (string) ($template['title'] ?? 'Notification'),
+            'intro' => (string) ($template['intro'] ?? ''),
+            'body_html' => (string) ($template['body_html'] ?? ''),
+            'cta_label' => (string) ($template['cta_label'] ?? ''),
+            'cta_url' => (string) ($template['cta_url'] ?? ''),
+            'variant' => (string) ($template['variant'] ?? 'standard'),
+            'app_name' => (string) ($config['app_name'] ?? 'SyDRA'),
+        ];
+
+        $html = sydra_mail_render_layout($mailMeta);
+
+        return [
+            'subject' => $mailMeta['subject'],
+            'html' => $html,
+        ];
+    }
+
+    /**
+     * Fonction centralisee de notification email par type de template.
+     *
+     * @param string|array<int, string> $destinataire
+     * @param array<string, mixed> $donnees
+     */
+    function envoyerNotificationEmail(string $type, string|array $destinataire, array $donnees = []): array
+    {
+        global $config;
+
+        if (!is_array($config)) {
+            return ['success' => false, 'error' => 'Configuration applicative indisponible.'];
+        }
+
+        $to = normalizeEmailList($destinataire);
+        $cc = [];
+        $leadAdminEmails = getLeadAndAdminEmails($config);
+
+        // Ces notifications administratives doivent toujours inclure Lead GTMP + Admin.
+        $adminTypes = ['nouvelle_alerte_soumise', 'rappel_validation_lead', 'alerte_urgente_critique'];
+        if (in_array($type, $adminTypes, true)) {
+            if ($to === []) {
+                $to = $leadAdminEmails;
+            } else {
+                $cc = $leadAdminEmails;
+            }
+        }
+
+        if ($to === []) {
+            return ['success' => false, 'error' => 'Aucun destinataire valide pour la notification.'];
+        }
+
+        try {
+            $rendered = renderNotificationTemplate($config, $type, $donnees);
+        } catch (Throwable $e) {
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+
+        return sendAppMailMultiDetailed(
+            $config,
+            $to,
+            $cc,
+            (string) ($rendered['subject'] ?? 'Notification SyDRA'),
+            (string) ($rendered['html'] ?? ''),
+            true
+        );
     }
 }

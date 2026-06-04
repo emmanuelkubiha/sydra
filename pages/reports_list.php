@@ -1,5 +1,7 @@
 <?php
 /** @var array<int, array<string, mixed>> $reports */
+$reportHeaderTitle = 'Liste des rapports';
+require __DIR__ . '/partials/report_header.php';
 ?>
 <div class="card">
     <h1>Liste des rapports</h1>

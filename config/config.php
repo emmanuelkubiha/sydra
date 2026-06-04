@@ -48,6 +48,8 @@ loadEnvFile($baseDir . '/.env.');
 // Production: APP_URL en https (ex: https://sydra.fosip-drc.org), DB_* dedies, SMTP_* valides.
 return [
     'app_name' => $_ENV['APP_NAME'] ?? 'SyDRA',
+    'app_env' => strtolower($_ENV['APP_ENV'] ?? 'development'),
+    'app_debug' => !in_array(strtolower($_ENV['APP_DEBUG'] ?? 'false'), ['0', 'false', 'no'], true),
     'app_url' => rtrim($_ENV['APP_URL'] ?? 'http://localhost:8888/SyDRA', '/'),
     'support_email' => $_ENV['SUPPORT_EMAIL'] ?? $_ENV['ADMIN_EMAIL'] ?? ($_ENV['MAIL_FROM'] ?? 'it@fosip-drc.org'),
     'db' => [

@@ -1,227 +1,347 @@
-# SyDRA - Application web de Monitoring de Protection
+# SyDRA - Application web de rapportage et alerte
 
-SyDRA (Systeme de Documentation, de Rapportage et d'Alerte) est une application PHP/MySQL pour le monitoring humanitaire.
+SyDRA (Systeme de Documentation, de Rapportage et d'Alerte) est une application PHP/MySQL simple, sans MVC lourd, utilisee pour la saisie, le suivi et la coordination d'informations terrain.
 
-## Stack utilisee
-- PHP orienté objet (architecture MVC)
-- MySQL
-- Bootstrap 5
-- AdminLTE
-- AJAX / Fetch API
-- DataTables
-- Chart.js
-- Leaflet.js + heatmap
-- PHPMailer (service prevu)
-- TCPDF (service prevu)
-- PhpSpreadsheet (service prevu)
+## 1) Ce que fait l'application
 
-## Pourquoi plusieurs dossiers et pas un seul index.php
-Un seul `index.php` est vite difficile a maintenir. En MVC:
-- `public/index.php` = routeur frontal (point d'entree unique)
-- `app/Controllers` = logique des ecrans/API
-- `app/Models` = acces donnees
-- `app/Views` = interfaces
-- `app/Helpers` = utilitaires (langue)
-- `app/Services` = integrations (IA, PDF, Excel, mail)
-- `config` = configuration
-- `database` = schema SQL
-- `public/assets` = JS/CSS/images
-- `public/uploads` = fichiers exportes
+- Authentification des utilisateurs (admin, lead, co-lead, reporter)
+- Tableau de bord connecte
+- Creation et listing de rapports (FLASH/NOTE)
+- Hub Rapportage moderne (accueil, KPI, cartographie operationnelle)
+- Wizard manuel en 4 etapes (localisation, faits, analyse, pieces jointes)
+- API AJAX de sauvegarde rapport (`api/save_report.php`) avec codification de termes sensibles
+- Profil utilisateur avec photo/avatar
+- Invitation utilisateur par email avec activation (48h)
+- Mot de passe oublie et reinitialisation securisee
+- Messages flash affiches en toasts AJAX
 
-Cette structure est professionnelle, evolutive, testable et plus sure.
+## 2) Structure de l'interface (header, footer, pages)
 
-## Roles utilisateurs (etat actuel)
-Le systeme est pensé avec 4 roles principaux:
-- `ADMIN` : administration globale, supervision systeme, configuration.
-- `CLUSTER_LEADER` : pilotage, validation et coordination des alertes.
-- `CLUSTER_CO_LEAD` : soutien du lead, revue et suivi operationnel.
-- `REPORTER` : production terrain, creation et soumission des rapports.
+- Header global: `pages/en_tete.php`
+  - charge CSS + bootstrap-icons
+  - affiche logo, nom applicatif, switch langue FR/EN
+  - affiche menu selon session/role
+  - affiche loader global + bandeau public en mode non connecte
+- Footer global: `pages/pied_de_page.php`
+  - ferme le layout principal
+  - charge `assets/js/app.js`
+- Pages principales:
+  - `pages/login.php`
+  - `pages/forgot_password.php`
+  - `pages/reset_password.php`
+  - `pages/dashboard.php`
+  - `pages/reports_create.php`
+  - `pages/reports_list.php`
+  - `pages/profile.php`
+  - `pages/users.php`
+  - `pages/rapportage/index.php`
+  - `pages/rapportage/creer_wizard.php`
+  - `pages/rapportage/creer_ia.php`
 
-Si tu veux une version encore plus minimale, `CLUSTER_LEADER` et `CLUSTER_CO_LEAD` peuvent etre fusionnes en un seul role `CLUSTER`.
+## 3) Arborescence du projet
 
-## Comptes de test par défaut
-Mot de passe pour tous: `password`
-- `admin@sydra.local` -> Administrateur
-- `lead.gtmp@sydra.local` -> Lead GTMP
-- `colead.gtmp@sydra.local` -> Co-Lead GTMP
-- `reporter@sydra.local` -> Organisation Rapportante
-- `cluster@sydra.local` -> Cluster Protection
+```text
+SyDRA/
+├── api/
+│   └── save_report.php          # Sauvegarde AJAX Wizard + upload pieces jointes
+├── actions/
+│   └── create_user.php           # Endpoint creation compte utilisateur
+├── index.php                     # Routeur frontal + logique metier
+├── config/
+│   ├── config.php                # Chargement .env/.env. + config app/db/mail
+│   └── mail.php                  # Envoi SMTP (PHPMailer) + diagnostics
+├── database/
+│   └── schema.sql                # Schema SQL de base
+├── pages/
+│   ├── en_tete.php               # Header global
+│   ├── pied_de_page.php          # Footer global
+│   ├── partials/
+│   │   └── report_header.php     # En-tete branding rapports (logo bleu)
+│   ├── reports/
+│   │   └── alerte_details.php    # Detail rapport/alerte
+│   ├── rapportage/
+│   │   ├── index.php             # Hub de rapportage (hero + KPI + map Leaflet)
+│   │   ├── creer_wizard.php      # Formulaire manuel BS-Stepper + Dropzone
+│   │   └── creer_ia.php          # Page d'attente Assistant IA
+│   ├── login.php
+│   ├── forgot_password.php
+│   ├── reset_password.php
+│   ├── dashboard.php
+│   ├── reports_create.php
+│   ├── reports_list.php
+│   ├── profile.php
+│   └── users.php
+├── assets/
+│   ├── css/style.css             # Styles globaux + toasts + layout
+│   └── js/app.js                 # Loader, toasts, interactions UI
+│   └── img/sydra-logo/           # Logos officiels utilises en production
+├── Annexes/
+│   └── assets-source/SyDRA-Logo/ # Sources graphiques archivees
+├── uploads/
+│   ├── avatars/
+│   ├── reports/
+│   │   └── attachments/
+│   └── organizations/logos/
+├── .env.example
+├── README.md
+├── composer.json
+└── vendor/                       # Dependances Composer (local)
+```
 
-## Workflow
-Brouillon -> Soumis -> En revision -> Valide -> Publie
+## 4) Architecture technique
 
-## Fonctionnalites MVP deja en place
-- Authentification securisee (session + CSRF)
-- Gestion organisations (creer, activer, desactiver)
-- Rapportage FLASH / NOTE
-- Formulaire avec localisation et coordonnees GPS
-- Auto-remplissage intelligent des champs localisation a partir de la recherche carte
-- Reverse geocoding lors du clic/deplacement sur la carte
-- Codification automatique des mots sensibles
-- Dashboard ameliore (KPIs, graphique, bloc priorites, icones)
-- Accueil differencie par role (Admin / Lead-CoLead-Cluster / Rapporteur / Defaut)
-- Carte decisionnelle lead sur l'accueil (marqueurs colores par gravite + popup incident)
-- Statistiques quantifiees des categories vulnerables (enfants, personnes agees, handicap)
-- Cartographie Leaflet avec filtres territoire/gravite et heatmap
-- Changement de mot de passe utilisateur avec exigences de securite
-- Header + footer discrets
-- Aide connexion via bouton discret "Besoin d'aide ?"
-- Loader global avec messages tips dynamiques
-- Parametres organisation etendus: logo, site web, email de contact
-- Endpoints AJAX:
-  - recherche lieu
-  - IA assistive (base)
-  - export PDF/Excel (base)
-  - notification email (base)
+- Point d'entree unique: `index.php`
+- Routage par query string: `?page=...`
+- Actions POST centralisees dans `index.php` via `action`
+- Vues rendues par inclusion des fichiers de `pages/`
+- Session PHP pour auth + CSRF + flashes
+- PDO pour toutes les operations SQL sensibles
 
-## Securite appliquee dans le systeme
-- Controle d'acces centralise via front-controller `public/index.php` (routes privees bloquees hors session).
-- Session utilisateur obligatoire sur tous les modules metier via `Auth::requireLogin()`.
-- Protection CSRF sur formulaires critiques (connexion, profil, mot de passe, organisations, actions notifications).
-- Hashage des mots de passe avec `password_hash()` (BCRYPT) et verification `password_verify()`.
-- Politique mot de passe renforcee: minimum 10 caracteres, majuscule, minuscule, chiffre, caractere special.
-- Echappement HTML systematique dans les vues via `htmlspecialchars(...)` pour limiter les risques XSS.
-- Validation de type MIME et de taille pour les uploads (preuves, logos, photo profil).
-- Restriction des methodes HTTP (retour 405 sur routes sensibles appelees avec une methode invalide).
-- Reponses JSON controlees pour endpoints API avec statut d'erreur explicite.
-- Isolation des ressources upload dans `public/uploads/*` avec noms de fichiers assainis.
+## 5) Configuration environnement
 
-## Routes publiques francisees (URL)
-Routes canoniques utilisees dans les menus et formulaires:
-- `?r=connexion`
-- `?r=deconnexion`
-- `?r=accueil`
-- `?r=rapports/creer`
-- `?r=rapports/liste`
-- `?r=profil`
-- `?r=profil/mot-de-passe`
-- `?r=notifications`
-- `?r=notifications/tout-lire`
+Le systeme charge `.env`, puis `.env.`.
 
-Compatibilite legacy conservee:
-- `login`, `logout`, `dashboard`, `reports/create`, `reports/list`, `notifications/mark-all-read`.
+Variables importantes:
 
-## Installation (MAMP)
-1. Mettre le projet dans:
-   - `/Applications/MAMP/htdocs/SyDRA`
-2. Copier l'environnement:
-   - `cp .env.example .env`
-3. Importer `database/schema.sql` dans MySQL (phpMyAdmin).
-4. Si le compte demo existe deja et refuse la connexion, executer `database/fix_login.sql`.
-5. IMPORTANT: dans MAMP, choisir **PHP 8.x** (pas 7.x), sinon erreur 500 possible.
-6. Ouvrir:
-   - `http://localhost:8888/SyDRA/public`
+- App: `APP_NAME`, `APP_URL`, `APP_ENV`, `APP_DEBUG`
+- Base: `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASS`
+- Mail: `MAIL_FROM`, `MAIL_FROM_NAME`, `SUPPORT_EMAIL`
+- SMTP: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `SMTP_AUTH`
 
-Important apres mise a jour du schema:
-- Reimporter `database/schema.sql` pour obtenir les nouveaux champs (vulnerabilites, logo/site/contact).
+Comportement production:
 
-## Compte demo
-- Email: `reporter@sydra.local`
-- Mot de passe: `password`
+- `APP_ENV=production` desactive le provisionnement automatique des comptes demo.
+- Cette mesure evite toute reecriture non voulue des mots de passe en production.
 
-## Exigences mot de passe utilisateur
-- Au moins 10 caracteres
-- Au moins 1 majuscule
-- Au moins 1 minuscule
-- Au moins 1 chiffre
-- Au moins 1 caractere special
+## 6) Base de donnees: tables et schema
 
-## Invitation utilisateur par email (admin)
-Flux simplifie en 3 etapes:
-1. L'admin ouvre `Organisations` -> `Inviter un utilisateur`.
-2. Le systeme pre-cree un compte inactif et envoie un email d'activation.
-3. L'utilisateur clique le lien, definit son mot de passe et active son compte.
+### 6.1 Tables principales
 
-Regles de securite du ticket d'activation:
-- Lien unique signe par token aleatoire fort (hashe en base).
-- Expiration automatique apres 48 heures.
-- Ticket invalide apres utilisation.
-- Si l'utilisateur n'active pas son compte dans ce delai, le ticket expire dans le systeme.
+- `users`
+  - compte utilisateur, hash mot de passe, role/etat, infos profil
+- `reports`
+  - rapports terrain lies aux utilisateurs (workflow, localisation detaillee, analyse)
+- `report_status_history`
+  - journal des changements de statut (brouillon, soumis, revision, valide, publie)
+- `report_attachments`
+  - pieces jointes des rapports (preuves photos/documents)
+- `account_invitations`
+  - invitations avec token hash, expiration, marqueur usage
+- `password_reset_requests`
+  - demandes de reset avec token hash, expiration, marqueur usage
 
-Message email envoye:
-- Felicitations pour la creation de compte SyDRA.
-- Rappel du role de SyDRA.
-- Lien d'activation.
-- Mention explicite: ignorer le message en cas d'erreur.
+Note compatibilite role:
 
-Configuration SMTP a renseigner dans `.env`:
-- `MAIL_FROM`
-- `MAIL_FROM_NAME`
-- `SMTP_HOST`
-- `SMTP_PORT`
-- `SMTP_AUTH` (`true`/`false`)
-- `SMTP_SECURE` (`tls`, `ssl` ou `none`)
-- `SMTP_USER`
-- `SMTP_PASS`
+- Certaines bases utilisent `users.role` (ENUM)
+- D'autres utilisent `users.role_id` (FK vers table `roles`)
+- L'application detecte automatiquement le mode via `role_storage_mode()`
 
-## Rapportage: categories vulnerables quantifiees
-- Enfants
-- Personnes agees
-- Femmes
-- Hommes
-- Personnes avec handicap
-- Autres
+### 6.2 Relations logiques
 
-Ces champs permettent de produire des statistiques rapides et plus fiables.
+- `users (1) -> (N) reports`
+- `reports (1) -> (N) report_status_history`
+- `reports (1) -> (N) report_attachments`
+- `users (1) -> (N) account_invitations`
+- `users (1) -> (N) password_reset_requests`
 
-## Optionnel: installer les libs backend
-Si `composer` est disponible:
-- `composer install`
+### 6.3 DDL de reference
 
-## Configuration Gmail / SMTP
-Pour Gmail, tu ne cherches pas un `smtp_host` dans ta boite de reception. Les valeurs a utiliser sont:
+Le schema initial se trouve dans `database/schema.sql`.
+
+En plus, l'application applique des migrations defensives au demarrage:
+
+- creation de `password_reset_requests` si absente
+- ajout de colonnes profil manquantes dans `users` (dont `avatar_path`)
+- ajout automatique des colonnes workflow/wizard manquantes dans `reports`
+- creation de `report_status_history` et `report_attachments` si absentes
+
+## 11) Module Rapportage (v2)
+
+### 11.1 Ecrans principaux
+
+- `?page=rapportage`: hub d'accueil premium (hero + actions + KPI + map Leaflet)
+- `?page=rapportage-creer-wizar`: Wizard manuel en 4 etapes
+- `?page=rapportage-creer-AI`: page d'attente pour l'assistant IA
+- `?page=rapportage-liste-user`: liste des rapports de l'organisation connectee
+- `?page=rapportage-admin-list`: tour de controle Lead/Admin
+
+### 11.2 Wizard manuel
+
+- Etape 1: localisation + geolocalisation navigateur
+- Etape 2: faits et bilan (gravite, victimes, deplacements, description)
+- Etape 3: analyse et recommandations
+- Etape 4: pieces jointes (Dropzone), brouillon ou soumission cluster
+
+### 11.3 Codification de termes sensibles
+
+Le backend applique une codification automatique avant insertion:
+
+- `AFC/M23` -> `GA001`
+- `Wazalendo` -> `GA002`
+
+Cette codification est actuellement appliquee sur:
+
+- `description`
+- `analyse`
+- `recommandations`
+
+### 11.4 Cartographie operationnelle
+
+La carte du hub est initialisee sur l'Est de la RDC avec:
+
+- centre: `[-3.0, 27.5]`
+- zoom initial: `7`
+- zoom minimum: `6`
+- limites de navigation (`maxBounds`): Nord `0.0`, Sud `-5.0`, Ouest `25.0`, Est `29.5`
+
+## 7) Processus de securite
+
+### 7.1 Anti-injection SQL
+
+- Requetes preparees PDO (`prepare/execute`)
+- Aucune concatenation directe des entrées utilisateur dans les requetes critiques
+
+### 7.2 Mots de passe
+
+- Stockage hash uniquement: `password_hash(..., PASSWORD_BCRYPT)`
+- Verification: `password_verify(...)`
+- Pas de stockage en clair
+
+### 7.3 CSRF
+
+- Token CSRF en session
+- Verification obligatoire pour POST sensibles
+
+### 7.4 XSS
+
+- Echappement HTML cote vue (`h(...)` / `htmlspecialchars`)
+
+### 7.5 Tokens de securite
+
+- Invitation et reset: token aleatoire fort
+- Seul le hash SHA-256 du token est stocke en base
+- Token invalide apres expiration ou utilisation
+
+## 8) Processus connexion
+
+1. L'utilisateur soumet email + mot de passe.
+2. Le systeme charge l'utilisateur actif (`is_active = 1`).
+3. Verification du hash avec `password_verify`.
+4. Session auth creee (`auth_user_id`).
+5. Redirection tableau de bord.
+
+## 9) Processus mot de passe oublie et reinitialisation
+
+### 9.1 Demande de reset
+
+1. Verification email.
+2. Generation token (32 octets aleatoires) + hash SHA-256.
+3. Enregistrement dans `password_reset_requests` avec expiration (1h).
+4. Envoi email SMTP avec lien `?page=reinitialiser_mot_de_passe&token=...`.
+
+### 9.2 Validation reset
+
+1. Verification token non utilise et non expire.
+2. Validation de politique de mot de passe.
+3. Ecriture du nouveau hash bcrypt dans `users.password_hash`.
+4. Marquage `used_at` du token de reset.
+
+### 9.3 Garantie de persistance du nouveau mot de passe
+
+Le flux reset est execute dans une transaction SQL atomique:
+
+- update `users.password_hash`
+- update `password_reset_requests.used_at`
+- commit unique, rollback en cas d'erreur
+
+En production, le seed de comptes demo est desactive (`APP_ENV=production`), donc aucun composant ne peut reecraser ce nouveau mot de passe.
+
+## 10) Processus email SMTP
+
+`config/mail.php` centralise l'envoi via PHPMailer:
+
+- verification de la configuration SMTP
+- message d'erreur explicite si PHPMailer absent
+- diagnostics host/port/auth/tls en cas d'echec
+
+Parametres Gmail typiques:
+
 - `SMTP_HOST=smtp.gmail.com`
 - `SMTP_PORT=587`
 - `SMTP_SECURE=tls`
-- `SMTP_USER=ton_adresse@gmail.com`
-- `SMTP_PASS=mot_de_passe_d_application`
+- `SMTP_AUTH=true`
+- `SMTP_USER=adresse@gmail.com`
+- `SMTP_PASS=mot_de_passe_application`
 
-Dans Google, va dans:
-- Compte Google
-- Sécurité
-- Validation en deux étapes
-- Mots de passe des applications
+### Gestion des Emails et Notifications Automatiques (Dossier `mail/`)
 
-Gmail ne laisse pas utiliser le mot de passe normal du compte pour SMTP si la validation en deux étapes est active. Il faut un mot de passe d'application.
+SyDRA centralise les emails transactionnels dans le dossier `mail/` avec une charte visuelle commune (template layout, couleurs institutionnelles, call-to-action).
 
-## Cause probable de ton erreur 500
-- Apache lisait `.htaccess` avec directives non compatibles, ou
-- MAMP etait en PHP 7.x alors que le projet cible PHP 8.
+Arborescence principale:
 
-Les correctifs appliques:
-- `.htaccess` tolerant
-- compatibilite de certaines fonctions
-- chargement `.env` plus robuste
-- protection stricte des routes hors connexion
-- page de chargement globale (loader)
-- schema SQL avec champs physiques en francais (et vues de compatibilite)
+- `mail/layout.php`: layout HTML commun a tous les emails.
+- `mail/creation_compte.php`: envoi des identifiants avec mot de passe genere.
+- `mail/reinitialisation_mdp.php`: lien securise de reinitialisation de mot de passe.
+- `mail/nouvelle_alerte_soumise.php`: notification de soumission d une nouvelle alerte.
+- `mail/alerte_validee.php`: notification de validation/publication d une alerte.
+- `mail/demande_correction.php`: demande de correction et complement d informations.
+- `mail/rappel_validation_lead.php`: rappel automatique des alertes non validees (>24h).
+- `mail/alerte_urgente_critique.php`: diffusion prioritaire d urgence critique.
 
-## Ce qui manque encore (prochaine phase)
-- Workflow complet par role (validation stricte et droits fins)
-- Journal des connexions et reset mot de passe par email
-- Ecrans d'administration avances (roles, permissions)
-- Export PDF/Excel finalise avec templates professionnels
-- Module IA guide avec questionnaire dynamique avant validation
-- Tableau de bord adapte dynamiquement selon role connecte
-- Gestion d'upload logo avec optimisation d'image et suppression
+Fonction centrale d envoi:
 
-## Fichiers d'accueil par role
-Le controleur choisit explicitement un fichier d'accueil selon le role:
-- `app/Controllers/DashboardController.php` -> `resolveDashboardViewByRole()`
-- `app/Views/accueil/accueil_admin.php`
-- `app/Views/accueil/accueil_lead.php`
-- `app/Views/accueil/accueil_rapporteur.php`
-- `app/Views/accueil/accueil_defaut.php`
-- `app/Views/accueil/tableau_de_bord.php` (base commune partagee)
+- `envoyerNotificationEmail($type, $destinataire, $donnees)` dans `config/mail.php`.
+- Cette fonction:
+  - selectionne automatiquement le bon template selon `$type`.
+  - injecte les donnees metier (`$donnees`) dans le template.
+  - applique le layout commun.
+  - envoie via PHPMailer en mode HTML.
+  - ajoute automatiquement Lead GTMP + Admin en destinataires/CC pour les notifications administratives.
 
-## Convention de nommage FR des vues
-Pour faciliter la comprehension metier, les vues principales ont ete francisees:
-- `app/Views/authentification/connexion.php` (ancien `auth/login.php`)
-- `app/Views/rapports/creer.php` (ancien `reports/create.php`)
-- `app/Views/rapports/liste.php` (ancien `reports/index.php`)
+Types de mails, evenement declencheur et destinataires:
 
-## Ce que tu peux fournir ensuite
-- Charte graphique exacte (logo, polices, couleurs officielles)
-- Regles metier precises de validation par role
-- Regles de codification officielles initiales
-- Parametres SMTP de production
+1. `creation_compte`
+  - Declencheur: creation d un compte utilisateur/organisation avec mot de passe provisoire.
+  - Destinataire: utilisateur/organisation concerne(e).
+
+2. `reinitialisation_mdp`
+  - Declencheur: action "Mot de passe oublie".
+  - Destinataire: utilisateur ayant demande la reinitialisation.
+
+3. `nouvelle_alerte_soumise`
+  - Declencheur: soumission d un rapport Flash/Note par une organisation.
+  - Destinataires: Lead GTMP et Admin (automatique, meme si un destinataire initial est fourni).
+
+4. `alerte_validee`
+  - Declencheur: validation d une alerte par le Cluster/Lead.
+  - Destinataire: organisation rapportante (auteur de l alerte).
+
+5. `demande_correction`
+  - Declencheur: demande de complement/correction par le Lead.
+  - Destinataire: organisation rapportante.
+
+6. `rappel_validation_lead`
+  - Declencheur: job de relance (alertes en attente > 24h).
+  - Destinataires: Lead GTMP et Admin (automatique).
+
+7. `alerte_urgente_critique`
+  - Declencheur: soumission d une alerte avec niveau d urgence critique.
+  - Destinataires: diffusion large et prioritaire, avec inclusion systematique de Lead GTMP + Admin.
+
+## 11) Installation rapide
+
+1. Configurer `.env.` depuis `.env.example`.
+2. Importer `database/schema.sql`.
+3. Lancer `composer install`.
+4. Verifier permissions sur `uploads/`.
+5. Tester: login, reset password, invitation, SMTP.
+
+## 12) Verification technique
+
+Commande utile:
+
+- `php -l index.php`
+
+Pour MAMP:
+
+- `/Applications/MAMP/bin/php/php8.3.14/bin/php -l index.php`

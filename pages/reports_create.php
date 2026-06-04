@@ -24,6 +24,14 @@ if (!function_exists('csrf_token')) {
         <label>Localisation</label>
         <input name="location_text" placeholder="Ville / territoire">
 
+        <label>Niveau d'urgence</label>
+        <select name="urgency_level" required>
+            <option value="Faible">Faible</option>
+            <option value="Moyenne" selected>Moyenne</option>
+            <option value="Elevee">Elevee</option>
+            <option value="Critique">Critique</option>
+        </select>
+
         <label>Contenu</label>
         <textarea name="content" required></textarea>
 
