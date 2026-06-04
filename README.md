@@ -43,7 +43,10 @@ SyDRA (Systeme de Documentation, de Rapportage et d'Alerte) est une application 
 ```text
 SyDRA/
 ├── api/
-│   └── save_report.php          # Sauvegarde AJAX Wizard + upload pieces jointes
+│   ├── save_report.php          # Sauvegarde AJAX Wizard + upload pieces jointes
+│   ├── get_dashboard_filtered.php # Filtres hub (KPI + carte + séries)
+│   ├── change_status.php        # Boucle de décision Lead/Admin (statut + historique + notif + email)
+│   └── mark_notification_read.php # Marquage notification lue (AJAX)
 ├── actions/
 │   └── create_user.php           # Endpoint creation compte utilisateur
 ├── index.php                     # Routeur frontal + logique metier
@@ -96,6 +99,28 @@ SyDRA/
 - Vues rendues par inclusion des fichiers de `pages/`
 - Session PHP pour auth + CSRF + flashes
 - PDO pour toutes les operations SQL sensibles
+
+### 4.1 Role des API (dossier api/)
+
+- `api/save_report.php`
+  - Rôle: enregistre un rapport depuis le Wizard (brouillon ou soumis), pièces jointes incluses.
+  - Entrées: localisation, incident, analyse, `status_action`, `csrf`.
+  - Sortie: JSON avec `report_id`, `status`, message.
+
+- `api/get_dashboard_filtered.php`
+  - Rôle: alimente le Hub Rapportage en mode AJAX.
+  - Entrées: `date_debut`, `date_fin`, `organisation_id`.
+  - Sortie: JSON avec `stats`, `markers`, `charts`.
+
+- `api/change_status.php`
+  - Rôle: traite les décisions Lead/Admin (`VALIDATE`, `REJECT`, `REQUEST_INFO`).
+  - Effets: met à jour `reports`, écrit `report_status_history`, crée notification, envoie email.
+  - Sortie: JSON de confirmation.
+
+- `api/mark_notification_read.php`
+  - Rôle: marque une notification comme lue lors du clic dans le dropdown header.
+  - Entrées: `notification_id`, `csrf`.
+  - Sortie: JSON `{ ok: true }`.
 
 ## 5) Configuration environnement
 
@@ -194,6 +219,14 @@ La carte du hub est initialisee sur l'Est de la RDC avec:
 - zoom minimum: `6`
 - limites de navigation (`maxBounds`): Nord `0.0`, Sud `-5.0`, Ouest `25.0`, Est `29.5`
 
+### 11.5 Boucle de décision et notifications
+
+- Les modals de la page détail alerte envoient désormais la décision vers `api/change_status.php`.
+- Le backend applique la décision et notifie l'organisation:
+  - notification in-app (`notifications`)
+  - email transactionnel (`mail/demande_correction.php` ou `mail/alerte_validee.php`)
+- Le centre de notifications du header lit les 5 dernières notifications et gère le marquage lu via `api/mark_notification_read.php`.
+
 ## 7) Processus de securite
 
 ### 7.1 Anti-injection SQL
@@ -285,6 +318,109 @@ Arborescence principale:
 - `mail/nouvelle_alerte_soumise.php`: notification de soumission d une nouvelle alerte.
 - `mail/alerte_validee.php`: notification de validation/publication d une alerte.
 - `mail/demande_correction.php`: demande de correction et complement d informations.
+
+## 12) Mise en local (developpement)
+
+### 12.1 Prerequis
+
+- PHP 8.1+ (8.2/8.3 recommande)
+- MySQL/MariaDB
+- Composer
+- Extension PDO MySQL active
+
+### 12.2 Configuration locale rapide
+
+1. Cloner le projet
+2. Installer les dependances: `composer install`
+3. Creer `.env` a partir de `.env.example`
+4. Renseigner au minimum:
+  - `APP_ENV=development`
+  - `APP_DEBUG=true`
+  - `APP_URL=http://localhost:8888/SyDRA`
+  - `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASS`
+  - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`
+5. Importer la base
+6. Demarrer Apache/PHP + MySQL
+
+## 13) Mise en production (sydra.fosip-drc.org)
+
+### 13.1 Variables obligatoires en ligne
+
+Configurer l environnement serveur (fichier `.env` ou variables systeme):
+
+- `APP_ENV=production`
+- `APP_DEBUG=false`
+- `APP_URL=https://sydra.fosip-drc.org`
+- Parametres DB de production
+- Parametres SMTP de production (obligatoire pour invitations/reset/changements email)
+
+Important:
+
+- Ne pas exposer les comptes de test en production.
+- Verifier les permissions ecriture sur `uploads/`.
+
+### 13.2 Deploiement type
+
+1. Sauvegarder la base actuelle (local)
+2. Importer la base sur le serveur de production
+3. Deployer le code applicatif
+4. Executer `composer install --no-dev --optimize-autoloader`
+5. Configurer `.env` prod
+6. Tester les flux critiques (connexion, rapportage, decision, notifications, email)
+
+## 14) Export de la base actuelle vers la production
+
+Exemple local MAMP:
+
+```bash
+/Applications/MAMP/Library/bin/mysql80/bin/mysqldump \
+  -h127.0.0.1 -P8889 -uroot -proot sydra > sydra_export.sql
+```
+
+Import sur serveur cible:
+
+```bash
+mysql -h<HOST_PROD> -P<PORT_PROD> -u<USER_PROD> -p <DB_PROD> < sydra_export.sql
+```
+
+Recommandations:
+
+- Faire un backup de la base de production avant import.
+- Tester d abord sur une base/staging de preproduction.
+
+## 15) Flux de decision Lead/Admin (UX et statuts)
+
+Lors d un clic sur une decision (`Valider et publier`, `Demander des informations`, `Rejeter`):
+
+1. Un petit modal de confirmation stylise affiche:
+  - l action choisie,
+  - les implications metier,
+  - le commentaire qui sera transmis.
+2. Au submit, API `api/change_status.php` traite la decision.
+3. Le retour utilisateur distingue:
+  - succes serveur + succes email,
+  - succes serveur + echec email,
+  - echec serveur.
+
+Interpretation:
+
+- `succes serveur`: la decision est bien en base (statut/historique/notification in-app)
+- `echec email`: la decision reste appliquee, mais l envoi mail a echoue
+- `echec serveur`: aucune decision appliquee
+
+## 16) Checklist go-live (minimum)
+
+1. `APP_ENV=production`, `APP_DEBUG=false`
+2. `APP_URL=https://sydra.fosip-drc.org`
+3. SMTP valide et teste (invitation/reset/decision)
+4. Suppression/masquage des identifiants de test dans l UI login
+5. Permissions dossiers `uploads/`
+6. Test fonctionnel complet:
+  - connexion/logout
+  - creation rapport + pieces jointes
+  - decision lead (3 cas)
+  - notifications + emails
+  - exports PDF/Excel
 - `mail/rappel_validation_lead.php`: rappel automatique des alertes non validees (>24h).
 - `mail/alerte_urgente_critique.php`: diffusion prioritaire d urgence critique.
 
