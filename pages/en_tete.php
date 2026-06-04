@@ -9,6 +9,81 @@ $lang = function_exists('current_lang') ? current_lang() : 'fr';
 $loaderContext = (string) ($_GET['page'] ?? 'connexion');
 $notifItems = is_array($topNotifications ?? null) ? $topNotifications : [];
 $notifCount = (int) ($unreadNotificationsCount ?? 0);
+$pendingValidationCount = 0;
+$notifDisplayCount = 0;
+
+$sessionUserId = (int) ($_SESSION['user_id'] ?? $_SESSION['auth_user_id'] ?? 0);
+if (isset($pdo) && $pdo instanceof PDO && $sessionUserId > 0) {
+    try {
+        $colStmt = $pdo->prepare('SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table');
+        $colStmt->execute(['table' => 'notifications']);
+        $notifColumns = array_map('strtolower', $colStmt->fetchAll(PDO::FETCH_COLUMN));
+
+        $hasIsRead = in_array('is_read', $notifColumns, true);
+        $hasReadAt = in_array('read_at', $notifColumns, true);
+
+        if ($hasIsRead || $hasReadAt) {
+            $countSql = $hasIsRead
+                ? 'SELECT COUNT(*) FROM notifications WHERE (user_id = :uid OR user_id IS NULL) AND is_read = 0'
+                : 'SELECT COUNT(*) FROM notifications WHERE (user_id = :uid OR user_id IS NULL) AND read_at IS NULL';
+            $countStmt = $pdo->prepare($countSql);
+            $countStmt->execute(['uid' => $sessionUserId]);
+            $notifCount = (int) $countStmt->fetchColumn();
+
+            $listSql = 'SELECT n.id, n.title, n.message, n.target_url, n.created_at
+                        FROM notifications n
+                        WHERE (n.user_id = :uid OR n.user_id IS NULL)
+                        ORDER BY n.created_at DESC
+                        LIMIT 5';
+            $listStmt = $pdo->prepare($listSql);
+            $listStmt->execute(['uid' => $sessionUserId]);
+            $notifItems = $listStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        }
+    } catch (Throwable $e) {
+        // Fallback silencieux sur les variables deja injectees.
+    }
+}
+
+if (isset($pdo) && $pdo instanceof PDO && is_array($authUser)) {
+    $roleCode = strtoupper((string) ($authUser['role'] ?? $authUser['role_code'] ?? ''));
+    if ($roleCode === '' && isset($authUser['role_id'])) {
+        try {
+            $roleStmt = $pdo->prepare('SELECT COALESCE(code, "") FROM roles WHERE id = :id LIMIT 1');
+            $roleStmt->execute(['id' => (int) ($authUser['role_id'] ?? 0)]);
+            $roleCode = strtoupper((string) $roleStmt->fetchColumn());
+        } catch (Throwable $e) {
+            $roleCode = '';
+        }
+    }
+
+    if (in_array($roleCode, ['ADMIN', 'CLUSTER_LEADER', 'GTMP_LEAD', 'GTMP_COLEAD', 'CLUSTER_PROTECTION', 'LEAD_GTMP'], true)) {
+        try {
+            $pendingStmt = $pdo->query('SELECT COUNT(*)
+                                        FROM reports
+                                        WHERE LOWER(REPLACE(REPLACE(REPLACE(COALESCE(workflow_status, ""), "é", "e"), "è", "e"), "ê", "e"))
+                                              IN ("soumis", "submitted", "en revue", "en revision", "under_review")');
+            $pendingValidationCount = (int) $pendingStmt->fetchColumn();
+        } catch (Throwable $e) {
+            $pendingValidationCount = 0;
+        }
+    }
+}
+
+$notifDisplayCount = max(0, $notifCount) + max(0, $pendingValidationCount);
+
+$formatNotifDate = static function (string $raw): string {
+    $ts = strtotime($raw);
+    if ($ts === false) {
+        return $raw;
+    }
+
+    $months = [
+        1 => 'Janvier', 2 => 'Février', 3 => 'Mars', 4 => 'Avril', 5 => 'Mai', 6 => 'Juin',
+        7 => 'Juillet', 8 => 'Août', 9 => 'Septembre', 10 => 'Octobre', 11 => 'Novembre', 12 => 'Décembre',
+    ];
+    $month = $months[(int) date('n', $ts)] ?? date('m', $ts);
+    return 'Le ' . date('d', $ts) . ' ' . $month . ' ' . date('Y', $ts) . ' à ' . date('H\\hi', $ts);
+};
 $isAuth = is_array($authUser);
 $homeLink = $isAuth ? '?page=tableau_de_bord' : '?page=connexion';
 $menuFile = __DIR__ . '/menus/menu_reporter.php';
@@ -48,6 +123,8 @@ if ($isAuth) {
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="<?= htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
     <title><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8'); ?></title>
+    <link rel="icon" type="image/png" href="assets/img/sydra-logo/BLEU-PRIMARY-SYDRA-LOGO.png">
+    <link rel="apple-touch-icon" href="assets/img/sydra-logo/BLEU-PRIMARY-SYDRA-LOGO.png">
     <?php $cssVersion = @filemtime(__DIR__ . '/../assets/css/style.css') ?: time(); ?>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="assets/css/style.css?v=<?= (int) $cssVersion; ?>">
@@ -132,20 +209,30 @@ if ($isAuth) {
                 <div class="notif-wrapper" id="notif-wrapper">
                     <button type="button" id="notif-toggle" class="notif-btn" aria-label="Notifications">
                         <i class="bi bi-bell-fill"></i>
-                        <?php if ($notifCount > 0): ?>
-                            <span class="notif-badge"><?= (int) $notifCount; ?></span>
+                        <?php if ($notifDisplayCount > 0): ?>
+                            <span class="notif-badge"><?= (int) $notifDisplayCount; ?></span>
                         <?php endif; ?>
                     </button>
                     <div class="notif-menu" id="notif-menu">
                         <div class="notif-menu-head">Notifications recentes</div>
                         <?php if ($notifItems === []): ?>
-                            <div class="notif-item muted">Aucune notification.</div>
+                            <?php if ($pendingValidationCount > 0): ?>
+                                <a class="notif-item" href="?page=rapportage-coordination">
+                                    <strong>Validation requise</strong>
+                                    <span><?= (int) $pendingValidationCount; ?> rapport(s) en attente de validation.</span>
+                                    <em>Accéder à la coordination</em>
+                                </a>
+                            <?php else: ?>
+                                <div class="notif-item muted">Aucune notification.</div>
+                            <?php endif; ?>
                         <?php else: ?>
                             <?php foreach ($notifItems as $notif): ?>
-                                <a class="notif-item" href="<?= htmlspecialchars((string) ($notif['target_url'] ?? '?page=tableau_de_bord'), ENT_QUOTES, 'UTF-8'); ?>">
+                                <a class="notif-item js-notif-item"
+                                   data-notif-id="<?= (int) ($notif['id'] ?? 0); ?>"
+                                   href="<?= htmlspecialchars((string) ($notif['target_url'] ?? 'index.php?page=tableau_de_bord'), ENT_QUOTES, 'UTF-8'); ?>">
                                     <strong><?= htmlspecialchars((string) ($notif['title'] ?? 'Notification'), ENT_QUOTES, 'UTF-8'); ?></strong>
                                     <span><?= htmlspecialchars((string) ($notif['message'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></span>
-                                    <em><?= htmlspecialchars((string) ($notif['created_at'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></em>
+                                    <em><?= htmlspecialchars($formatNotifDate((string) ($notif['created_at'] ?? '')), ENT_QUOTES, 'UTF-8'); ?></em>
                                 </a>
                             <?php endforeach; ?>
                         <?php endif; ?>
