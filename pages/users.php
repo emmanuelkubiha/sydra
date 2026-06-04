@@ -180,15 +180,26 @@ if (!function_exists('field_info_tip')) {
                             <i class="fa-solid fa-circle-info"></i>
                         </button>
 
-                        <a
-                            href="?page=profil&user_id=<?= (int) $u['id']; ?>"
-                            class="btn-icon btn-icon-primary"
-                            title="Modifier"
-                            data-bs-toggle="tooltip"
-                            data-bs-placement="top"
-                        >
-                            <i class="fa-solid fa-pen"></i>
-                        </a>
+                        <?php if ($isAdmin): ?>
+                            <button
+                                type="button"
+                                class="btn-icon btn-icon-primary js-user-edit"
+                                title="Modifier"
+                                data-bs-toggle="modal"
+                                data-bs-target="#userEditModal"
+                                data-user-id="<?= (int) $u['id']; ?>"
+                                data-user-full-name="<?= htmlspecialchars((string) ($u['full_name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                                data-user-org-name="<?= htmlspecialchars((string) ($u['organization_name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                                data-user-email="<?= htmlspecialchars((string) ($u['email'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                                data-user-role="<?= htmlspecialchars((string) ($u['role'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                                data-user-phone="<?= htmlspecialchars($phone, ENT_QUOTES, 'UTF-8'); ?>"
+                                data-user-site="<?= htmlspecialchars($website, ENT_QUOTES, 'UTF-8'); ?>"
+                                data-user-bio="<?= htmlspecialchars($bio, ENT_QUOTES, 'UTF-8'); ?>"
+                                data-user-status="<?= htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8'); ?>"
+                            >
+                                <i class="fa-solid fa-pen"></i>
+                            </button>
+                        <?php endif; ?>
 
                         <?php if ($isAdmin): ?>
                             <button
@@ -301,9 +312,96 @@ if (!function_exists('field_info_tip')) {
                     <label>Nouvelle adresse email</label>
                     <input type="email" name="new_email" id="email-change-new-email" required>
 
-                    <p class="inline-hint">Un email de confirmation sera envoyé à la nouvelle adresse. Le lien expirera dans quelques heures.</p>
+                    <label>Délai d'expiration du lien</label>
+                    <select name="expires_hours" id="email-change-expiry" required>
+                        <option value="24">24 heures</option>
+                        <option value="48" selected>48 heures</option>
+                    </select>
+
+                    <p class="inline-hint">Un email de confirmation sera envoyé à la nouvelle adresse. L'adresse en base ne change qu'après validation du lien.</p>
 
                     <button type="submit">Envoyer la demande de confirmation</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="userEditModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 rounded-4 shadow-sm">
+            <div class="modal-header">
+                <h5 class="modal-title">Modifier un utilisateur</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+            </div>
+            <div class="modal-body">
+                <p class="muted mb-2" id="user-edit-target"></p>
+
+                <form method="post" action="?page=utilisateurs" id="user-edit-form">
+                    <input type="hidden" name="action" value="update_user_admin">
+                    <input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
+                    <input type="hidden" name="target_user_id" id="user-edit-id" value="">
+
+                    <div class="grid">
+                        <div>
+                            <label>Acronyme / nom court</label>
+                            <input name="full_name" id="user-edit-full-name" required>
+                        </div>
+                        <div>
+                            <label>Nom complet organisation</label>
+                            <input name="organization_name" id="user-edit-org-name" required>
+                        </div>
+                    </div>
+
+                    <div class="grid">
+                        <div>
+                            <label>Rôle</label>
+                            <select name="role" id="user-edit-role" required>
+                                <option value="REPORTER">Reporteur</option>
+                                <option value="CLUSTER_LEADER">Lead GTMP</option>
+                                <option value="LEAD_GTMP">Lead GTMP (Legacy)</option>
+                                <option value="GTMP_LEAD">GTMP Lead</option>
+                                <option value="CLUSTER_CO_LEAD">Co-Lead</option>
+                                <option value="GTMP_COLEAD">GTMP Co-Lead</option>
+                                <option value="CLUSTER_PROTECTION">Cluster Protection</option>
+                                <option value="ADMIN">Admin</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label>Statut</label>
+                            <select name="statut" id="user-edit-status" required>
+                                <option value="Actif">Actif</option>
+                                <option value="Bloque">Inactif</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="grid">
+                        <div>
+                            <label>Téléphone</label>
+                            <input name="telephone_organisation" id="user-edit-phone" placeholder="+243...">
+                        </div>
+                        <div>
+                            <label>Site web</label>
+                            <input name="site_web" id="user-edit-site" placeholder="https://...">
+                        </div>
+                    </div>
+
+                    <label>Biographie</label>
+                    <textarea name="bio_organisation" id="user-edit-bio" rows="3" placeholder="Présentation, mandat, zones d'intervention..."></textarea>
+
+                    <label>Nouvelle adresse email (optionnel)</label>
+                    <input type="email" name="new_email" id="user-edit-new-email" placeholder="nouvelle.adresse@exemple.org">
+
+                    <label>Délai d'expiration du lien email</label>
+                    <select name="expires_hours" id="user-edit-expiry" required>
+                        <option value="24">24 heures</option>
+                        <option value="48" selected>48 heures</option>
+                    </select>
+
+                    <p class="inline-hint mb-2">Si vous changez l'email ici, un lien de confirmation sera envoyé à la nouvelle adresse. L'adresse en base ne sera modifiée qu'après confirmation du lien.</p>
+
+                    <button type="submit">Enregistrer les modifications</button>
                 </form>
             </div>
         </div>

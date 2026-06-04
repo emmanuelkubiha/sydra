@@ -364,30 +364,15 @@ document.addEventListener('DOMContentLoaded', function () {
 
         var rapportageUserTable = document.getElementById('rapportage-user-table');
         if (rapportageUserTable) {
-            window.jQuery(rapportageUserTable).DataTable({
-                pageLength: 12,
-                order: [[0, 'desc']],
-                language: {
-                    search: 'Rechercher:',
-                    lengthMenu: 'Afficher _MENU_ lignes',
-                    info: 'Affichage _START_ à _END_ sur _TOTAL_ lignes',
-                    paginate: { previous: 'Précédent', next: 'Suivant' }
-                }
-            });
+            // La page rapportage-mes-alertes utilise une barre de filtres Bootstrap custom.
+            // On n'initialise pas DataTables ici pour éviter les doublons UI
+            // ("Afficher/Rechercher") et les chevauchements de mise en page.
         }
 
         var rapportageAdminTable = document.getElementById('rapportage-admin-table');
         if (rapportageAdminTable) {
-            window.jQuery(rapportageAdminTable).DataTable({
-                pageLength: 15,
-                order: [[0, 'desc']],
-                language: {
-                    search: 'Rechercher:',
-                    lengthMenu: 'Afficher _MENU_ lignes',
-                    info: 'Affichage _START_ à _END_ sur _TOTAL_ lignes',
-                    paginate: { previous: 'Précédent', next: 'Suivant' }
-                }
-            });
+            // La page admin utilise une barre de filtres Bootstrap custom,
+            // donc on évite les contrôles natifs DataTables en doublon.
         }
     }
 
@@ -491,18 +476,25 @@ document.addEventListener('DOMContentLoaded', function () {
     if (notifToggle && notifMenu) {
         notifToggle.addEventListener('click', function () {
             notifMenu.classList.toggle('open');
+        });
 
-            if (!csrfToken) {
-                return;
-            }
-            var formData = new FormData();
-            formData.append('action', 'mark_notifications_read');
-            formData.append('csrf', csrfToken);
-            fetch('?page=' + encodeURIComponent((document.body.dataset.loaderContext || 'tableau_de_bord')), {
-                method: 'POST',
-                body: formData,
-                headers: { 'X-Requested-With': 'XMLHttpRequest' }
-            }).catch(function () { });
+        notifMenu.querySelectorAll('.js-notif-item').forEach(function (item) {
+            item.addEventListener('click', function (event) {
+                var notifId = Number(item.getAttribute('data-notif-id') || 0);
+                var targetUrl = item.getAttribute('href') || '?page=tableau_de_bord';
+                if (notifId <= 0 || !csrfToken) {
+                    return;
+                }
+
+                event.preventDefault();
+                fetch('api/mark_notification_read.php?id=' + encodeURIComponent(String(notifId)) + '&csrf=' + encodeURIComponent(csrfToken), {
+                    method: 'GET',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                    .finally(function () {
+                        window.location.href = targetUrl;
+                    });
+            });
         });
 
         document.addEventListener('click', function (event) {
@@ -1067,6 +1059,87 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             });
         });
+    }
+
+    var userEditModal = document.getElementById('userEditModal');
+    if (userEditModal) {
+        var userEditForm = document.getElementById('user-edit-form');
+        var userEditTarget = document.getElementById('user-edit-target');
+        var userEditId = document.getElementById('user-edit-id');
+        var userEditFullName = document.getElementById('user-edit-full-name');
+        var userEditOrgName = document.getElementById('user-edit-org-name');
+        var userEditRole = document.getElementById('user-edit-role');
+        var userEditStatus = document.getElementById('user-edit-status');
+        var userEditPhone = document.getElementById('user-edit-phone');
+        var userEditSite = document.getElementById('user-edit-site');
+        var userEditBio = document.getElementById('user-edit-bio');
+        var userEditNewEmail = document.getElementById('user-edit-new-email');
+
+        document.querySelectorAll('.js-user-edit').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                if (userEditId) {
+                    userEditId.value = btn.getAttribute('data-user-id') || '';
+                }
+                if (userEditFullName) {
+                    userEditFullName.value = btn.getAttribute('data-user-full-name') || '';
+                }
+                if (userEditOrgName) {
+                    userEditOrgName.value = btn.getAttribute('data-user-org-name') || btn.getAttribute('data-user-full-name') || '';
+                }
+                if (userEditRole) {
+                    userEditRole.value = btn.getAttribute('data-user-role') || 'REPORTER';
+                }
+                if (userEditStatus) {
+                    var rawStatus = (btn.getAttribute('data-user-status') || '').toLowerCase();
+                    userEditStatus.value = rawStatus.indexOf('attente') >= 0 ? 'Actif' : (rawStatus.indexOf('inactif') >= 0 ? 'Bloque' : 'Actif');
+                }
+                if (userEditPhone) {
+                    userEditPhone.value = btn.getAttribute('data-user-phone') || '';
+                }
+                if (userEditSite) {
+                    userEditSite.value = btn.getAttribute('data-user-site') || '';
+                }
+                if (userEditBio) {
+                    userEditBio.value = btn.getAttribute('data-user-bio') || '';
+                }
+                if (userEditNewEmail) {
+                    userEditNewEmail.value = '';
+                }
+                if (userEditTarget) {
+                    var name = btn.getAttribute('data-user-org-name') || btn.getAttribute('data-user-full-name') || 'Organisation';
+                    var email = btn.getAttribute('data-user-email') || '-';
+                    userEditTarget.textContent = 'Compte ciblé: ' + name + ' (' + email + ')';
+                }
+            });
+        });
+
+        if (userEditForm) {
+            userEditForm.addEventListener('submit', function (event) {
+                if (!(window.Swal && typeof window.Swal.fire === 'function')) {
+                    return;
+                }
+
+                event.preventDefault();
+                var hasNewEmail = userEditNewEmail && String(userEditNewEmail.value || '').trim() !== '';
+                var summary = hasNewEmail
+                    ? 'Les informations seront mises à jour. Un email de confirmation (48h) sera envoyé à la nouvelle adresse et l\'email en base ne changera qu\'après validation du lien.'
+                    : 'Les informations de cet utilisateur seront mises à jour immédiatement.';
+
+                window.Swal.fire({
+                    title: 'Confirmer la modification',
+                    text: summary,
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonText: 'Oui, enregistrer',
+                    cancelButtonText: 'Annuler',
+                    confirmButtonColor: '#005bbb'
+                }).then(function (result) {
+                    if (result && result.isConfirmed) {
+                        userEditForm.submit();
+                    }
+                });
+            });
+        }
     }
 
 });

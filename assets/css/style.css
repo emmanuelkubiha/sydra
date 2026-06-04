@@ -1537,10 +1537,16 @@ small.muted { color: var(--text-muted); }
 
 .profile-org-card {
     background: #ffffff;
+    border: 1px solid #dbe8f5;
 }
 
 .profile-shell {
     margin-bottom: 16px;
+}
+
+.profile-hero-card {
+    border: 1px solid #dbe8f5;
+    background: linear-gradient(140deg, #ffffff 0%, #f3f8ff 100%);
 }
 
 .profile-hero {
@@ -1572,6 +1578,90 @@ small.muted { color: var(--text-muted); }
 .profile-edit-trigger {
     width: auto;
     margin-bottom: 0;
+}
+
+.profile-shell .btn-primary,
+.profile-org-card .btn-primary {
+    background: #005bbb;
+    border-color: #005bbb;
+    color: #ffffff;
+}
+
+.profile-shell .btn-primary:hover,
+.profile-org-card .btn-primary:hover {
+    background: #004a96;
+    border-color: #004a96;
+}
+
+.profile-shell .btn-outline-primary,
+.profile-org-card .btn-outline-primary {
+    color: #005bbb;
+    border-color: #005bbb;
+}
+
+.profile-shell .btn-outline-primary:hover,
+.profile-org-card .btn-outline-primary:hover {
+    color: #ffffff;
+    background: #005bbb;
+    border-color: #005bbb;
+}
+
+.profile-shell .btn-outline-secondary,
+.profile-org-card .btn-outline-secondary {
+    color: #0f3f79;
+    border-color: #9fbde3;
+    background: #ffffff;
+}
+
+.profile-shell .btn-outline-secondary:hover,
+.profile-org-card .btn-outline-secondary:hover {
+    color: #0b2f5b;
+    border-color: #6f99cf;
+    background: #edf5ff;
+}
+
+.profile-section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    color: #0f172a;
+}
+
+.profile-section-title i {
+    color: #005bbb;
+}
+
+.password-field {
+    position: relative;
+}
+
+.password-field .form-control,
+.password-field input[type="password"],
+.password-field input[type="text"] {
+    padding-right: 42px;
+}
+
+.password-toggle {
+    position: absolute;
+    top: 50%;
+    right: 10px;
+    transform: translateY(-50%);
+    border: 0;
+    background: transparent;
+    color: #475569;
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.password-toggle:hover {
+    background: #edf5ff;
+    color: #005bbb;
 }
 
 .profile-insight-grid {
@@ -1754,7 +1844,12 @@ small.muted { color: var(--text-muted); }
     body.sidebar-mobile-open {
         overflow: hidden;
     }
-    .notif-menu { width: 92vw; right: -46px; }
+    .notif-menu {
+        width: min(92vw, 340px);
+        max-width: calc(100vw - 16px);
+        right: 0;
+        left: auto;
+    }
     .brand-logo-img,
     .topbar-logo,
     .login-logo,

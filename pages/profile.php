@@ -65,7 +65,7 @@ if ($orgName !== '') {
 <section class="profile-shell d-none" id="profile-edit">
     <div class="card shadow-sm rounded-4 border-0 profile-org-card">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-            <h2 class="mb-0">Modifier le profil de l'organisation</h2>
+            <h2 class="mb-0"><i class="fa-solid fa-pen-to-square me-1 text-primary"></i>Modifier le profil de l'organisation</h2>
             <button type="button" id="btn-cancel-edit" class="btn btn-outline-secondary">Retour</button>
         </div>
 
@@ -130,7 +130,7 @@ if ($orgName !== '') {
 <?php endif; ?>
 
 <div class="card shadow-sm rounded-4 border-0 profile-org-card">
-    <h2>Sécurité du compte</h2>
+    <h2 class="profile-section-title"><i class="fa-solid fa-shield-halved"></i>Sécurité du compte</h2>
     <?php if (isset($_GET['must_change_password']) && $_GET['must_change_password'] === '1'): ?>
         <p><small class="text-danger">Action requise: vous devez changer votre mot de passe pour continuer en toute sécurité.</small></p>
     <?php endif; ?>
@@ -140,13 +140,28 @@ if ($orgName !== '') {
         <input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
 
         <label class="form-label">Mot de passe actuel</label>
-        <input class="form-control" type="password" name="current_password" required>
+        <div class="password-field mb-2">
+            <input class="form-control" type="password" name="current_password" id="current-password" required>
+            <button class="password-toggle" type="button" data-toggle-password="current-password" aria-label="Afficher le mot de passe">
+                <i class="fa-regular fa-eye"></i>
+            </button>
+        </div>
 
         <label class="form-label">Nouveau mot de passe</label>
-        <input class="form-control" type="password" name="new_password" required>
+        <div class="password-field mb-2">
+            <input class="form-control" type="password" name="new_password" id="new-password" required>
+            <button class="password-toggle" type="button" data-toggle-password="new-password" aria-label="Afficher le mot de passe">
+                <i class="fa-regular fa-eye"></i>
+            </button>
+        </div>
 
         <label class="form-label">Confirmer le nouveau mot de passe</label>
-        <input class="form-control" type="password" name="new_password_confirmation" required>
+        <div class="password-field mb-2">
+            <input class="form-control" type="password" name="new_password_confirmation" id="new-password-confirmation" required>
+            <button class="password-toggle" type="button" data-toggle-password="new-password-confirmation" aria-label="Afficher le mot de passe">
+                <i class="fa-regular fa-eye"></i>
+            </button>
+        </div>
 
         <button class="btn btn-primary mt-3" type="submit">Changer le mot de passe</button>
     </form>
@@ -375,5 +390,22 @@ if ($orgName !== '') {
             }
         });
     }
+
+    Array.prototype.forEach.call(document.querySelectorAll('.password-toggle[data-toggle-password]'), function (button) {
+        button.addEventListener('click', function () {
+            var targetId = button.getAttribute('data-toggle-password') || '';
+            var input = targetId ? document.getElementById(targetId) : null;
+            if (!input) {
+                return;
+            }
+
+            var isPassword = input.getAttribute('type') === 'password';
+            input.setAttribute('type', isPassword ? 'text' : 'password');
+            button.setAttribute('aria-label', isPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe');
+            button.innerHTML = isPassword
+                ? '<i class="fa-regular fa-eye-slash"></i>'
+                : '<i class="fa-regular fa-eye"></i>';
+        });
+    });
 })();
 </script>

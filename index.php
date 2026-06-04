@@ -954,6 +954,7 @@ $pageAliases = [
     'rapportage-user-list' => 'rapportage-liste-user',
     'rapportage-admin-list' => 'rapportage-admin-list',
     'rapportage-view' => 'rapportage-voir',
+    'rapportage-details' => 'rapportage-voir',
     'rapportage-create-ai' => 'rapportage-creer-AI',
     'rapportage-create-wizard' => 'rapportage-creer-wizar',
     'rapportage-mes-alertes' => 'rapportage-liste-user',
@@ -1575,6 +1576,15 @@ if ($method === 'POST') {
             exit;
         }
 
+        if (trim((string) ($_POST['expires_hours'] ?? '')) !== '' && ctype_digit((string) $_POST['expires_hours'])) {
+            $expiresHours = (int) $_POST['expires_hours'];
+            if (!in_array($expiresHours, [24, 48], true)) {
+                $expiresHours = 48;
+            }
+        } else {
+            $expiresHours = 48;
+        }
+
         $targetUserId = (int) ($_POST['target_user_id'] ?? 0);
         $newEmail = strtolower(trim((string) ($_POST['new_email'] ?? '')));
 
@@ -1611,7 +1621,7 @@ if ($method === 'POST') {
 
         $token = bin2hex(random_bytes(32));
         $tokenHash = hash('sha256', $token);
-        $expiresAt = date('Y-m-d H:i:s', time() + (6 * 3600));
+        $expiresAt = date('Y-m-d H:i:s', time() + ($expiresHours * 3600));
 
         $cleanupStmt = $pdo->prepare('DELETE FROM email_change_requests WHERE user_id = :user_id AND used_at IS NULL');
         $cleanupStmt->execute(['user_id' => $targetUserId]);
@@ -1644,7 +1654,7 @@ if ($method === 'POST') {
             . '<p style="margin:20px 0 8px;">'
             . '<a href="' . htmlspecialchars($confirmUrl, ENT_QUOTES, 'UTF-8') . '" style="display:inline-block;background:#005bbb;color:#fff;text-decoration:none;font-weight:700;padding:12px 18px;border-radius:8px;">Confirmer ma nouvelle adresse</a>'
             . '</p>'
-            . '<p style="font-size:12px;color:#475569;">Ce lien expire dans 6 heures. Si vous n êtes pas à l origine de cette demande, ignorez ce message.</p>'
+            . '<p style="font-size:12px;color:#475569;">Ce lien expire dans ' . (int) $expiresHours . ' heures. Si vous n êtes pas à l origine de cette demande, ignorez ce message.</p>'
             . '</div></div></body></html>';
 
         $mailResult = sendAppMailDetailed($config, $newEmail, 'Confirmez votre nouvelle adresse email SyDRA', $html, true);
@@ -1655,6 +1665,195 @@ if ($method === 'POST') {
             set_flash('error', 'Demande enregistrée mais email non envoyé: ' . $errorMsg);
         }
 
+        header('Location: ?page=utilisateurs');
+        exit;
+    }
+
+    if ($action === 'update_user_admin') {
+        require_auth($authUser);
+        if (!is_admin($authUser)) {
+            set_flash('error', 'Action réservée aux administrateurs.');
+            header('Location: ?page=utilisateurs');
+            exit;
+        }
+
+        $targetUserId = (int) ($_POST['target_user_id'] ?? 0);
+        $fullName = trim((string) ($_POST['full_name'] ?? ''));
+        $organizationName = trim((string) ($_POST['organization_name'] ?? ''));
+        $role = strtoupper(trim((string) ($_POST['role'] ?? 'REPORTER')));
+        $status = strtolower(trim((string) ($_POST['statut'] ?? 'actif'))) === 'bloque' ? 'Bloque' : 'Actif';
+        $isActive = $status === 'Actif' ? 1 : 0;
+        $phone = trim((string) ($_POST['telephone_organisation'] ?? ''));
+        $siteWeb = trim((string) ($_POST['site_web'] ?? ''));
+        $bio = trim((string) ($_POST['bio_organisation'] ?? ''));
+        $newEmail = strtolower(trim((string) ($_POST['new_email'] ?? '')));
+        $expiresHours = (int) ($_POST['expires_hours'] ?? 48);
+        if (!in_array($expiresHours, [24, 48], true)) {
+            $expiresHours = 48;
+        }
+
+        if ($targetUserId <= 0 || $fullName === '' || $organizationName === '') {
+            set_flash('error', 'Acronyme, nom organisation et utilisateur cible sont obligatoires.');
+            header('Location: ?page=utilisateurs');
+            exit;
+        }
+
+        if ($siteWeb !== '' && !preg_match('#^https?://#i', $siteWeb)) {
+            $siteWeb = 'https://' . $siteWeb;
+        }
+        if ($siteWeb !== '' && !filter_var($siteWeb, FILTER_VALIDATE_URL)) {
+            set_flash('error', 'Le site web fourni est invalide.');
+            header('Location: ?page=utilisateurs');
+            exit;
+        }
+
+        $targetStmt = $pdo->prepare('SELECT id, full_name, email, role, role_id FROM users WHERE id = :id LIMIT 1');
+        $targetStmt->execute(['id' => $targetUserId]);
+        $target = $targetStmt->fetch();
+        if (!is_array($target)) {
+            set_flash('error', 'Utilisateur introuvable.');
+            header('Location: ?page=utilisateurs');
+            exit;
+        }
+
+        if ((int) ($authUser['id'] ?? 0) === $targetUserId && $isActive === 0) {
+            set_flash('error', 'Vous ne pouvez pas vous désactiver vous-même.');
+            header('Location: ?page=utilisateurs');
+            exit;
+        }
+
+        $allowedRoles = detect_user_roles($config);
+        if (!in_array($role, $allowedRoles, true)) {
+            $role = strtoupper((string) ($target['role'] ?? 'REPORTER'));
+        }
+
+        if (role_storage_mode($config) === 'role_fk') {
+            $roleId = resolve_role_id($config, $role);
+            if ($roleId === null) {
+                set_flash('error', 'Rôle introuvable dans la table roles.');
+                header('Location: ?page=utilisateurs');
+                exit;
+            }
+            $updateUser = $pdo->prepare('UPDATE users
+                                         SET full_name = :full_name,
+                                             organization_name = :organization_name,
+                                             role_id = :role_id,
+                                             statut = :statut,
+                                             is_active = :is_active,
+                                             telephone_organisation = :telephone_organisation,
+                                             phone = :phone,
+                                             site_web = :site_web,
+                                             bio_organisation = :bio_organisation,
+                                             bio = :bio
+                                         WHERE id = :id');
+            $updateUser->execute([
+                'full_name' => $fullName,
+                'organization_name' => $organizationName,
+                'role_id' => $roleId,
+                'statut' => $status,
+                'is_active' => $isActive,
+                'telephone_organisation' => $phone !== '' ? $phone : null,
+                'phone' => $phone !== '' ? $phone : null,
+                'site_web' => $siteWeb !== '' ? $siteWeb : null,
+                'bio_organisation' => $bio !== '' ? $bio : null,
+                'bio' => $bio !== '' ? $bio : null,
+                'id' => $targetUserId,
+            ]);
+        } else {
+            $updateUser = $pdo->prepare('UPDATE users
+                                         SET full_name = :full_name,
+                                             organization_name = :organization_name,
+                                             role = :role,
+                                             statut = :statut,
+                                             is_active = :is_active,
+                                             telephone_organisation = :telephone_organisation,
+                                             phone = :phone,
+                                             site_web = :site_web,
+                                             bio_organisation = :bio_organisation,
+                                             bio = :bio
+                                         WHERE id = :id');
+            $updateUser->execute([
+                'full_name' => $fullName,
+                'organization_name' => $organizationName,
+                'role' => $role,
+                'statut' => $status,
+                'is_active' => $isActive,
+                'telephone_organisation' => $phone !== '' ? $phone : null,
+                'phone' => $phone !== '' ? $phone : null,
+                'site_web' => $siteWeb !== '' ? $siteWeb : null,
+                'bio_organisation' => $bio !== '' ? $bio : null,
+                'bio' => $bio !== '' ? $bio : null,
+                'id' => $targetUserId,
+            ]);
+        }
+
+        $mailMessage = '';
+        if ($newEmail !== '') {
+            if (!filter_var($newEmail, FILTER_VALIDATE_EMAIL)) {
+                set_flash('error', 'Nouvelle adresse email invalide.');
+                header('Location: ?page=utilisateurs');
+                exit;
+            }
+
+            $currentEmail = strtolower(trim((string) ($target['email'] ?? '')));
+            if ($newEmail !== $currentEmail) {
+                $existsStmt = $pdo->prepare('SELECT id FROM users WHERE email = :email LIMIT 1');
+                $existsStmt->execute(['email' => $newEmail]);
+                if (is_array($existsStmt->fetch())) {
+                    set_flash('error', 'Cette adresse email est déjà utilisée par un autre compte.');
+                    header('Location: ?page=utilisateurs');
+                    exit;
+                }
+
+                $token = bin2hex(random_bytes(32));
+                $tokenHash = hash('sha256', $token);
+                $expiresAt = date('Y-m-d H:i:s', time() + ($expiresHours * 3600));
+
+                $cleanupStmt = $pdo->prepare('DELETE FROM email_change_requests WHERE user_id = :user_id AND used_at IS NULL');
+                $cleanupStmt->execute(['user_id' => $targetUserId]);
+
+                $insertStmt = $pdo->prepare('INSERT INTO email_change_requests (
+                    user_id, requested_by, old_email, new_email, token_hash, expires_at
+                ) VALUES (
+                    :user_id, :requested_by, :old_email, :new_email, :token_hash, :expires_at
+                )');
+                $insertStmt->execute([
+                    'user_id' => $targetUserId,
+                    'requested_by' => (int) ($authUser['id'] ?? 0),
+                    'old_email' => $currentEmail,
+                    'new_email' => $newEmail,
+                    'token_hash' => $tokenHash,
+                    'expires_at' => $expiresAt,
+                ]);
+
+                $appUrl = rtrim((string) ($config['app_url'] ?? ''), '/');
+                $confirmUrl = $appUrl . '/?page=confirmer_email&token=' . urlencode($token);
+                $targetName = (string) ($target['full_name'] ?? 'utilisateur');
+
+                $html = '<!doctype html><html><body style="margin:0;background:#eef2f7;font-family:Arial,sans-serif;color:#1f2a37;">'
+                    . '<div style="max-width:760px;margin:22px auto;background:#ffffff;border:1px solid #d7e2f0;border-radius:12px;overflow:hidden;">'
+                    . '<div style="background:#005bbb;color:#fff;padding:16px 22px;"><h2 style="margin:0;font-size:20px;">Confirmation de votre nouvelle adresse email</h2></div>'
+                    . '<div style="padding:20px 22px;">'
+                    . '<p>Bonjour ' . htmlspecialchars($targetName, ENT_QUOTES, 'UTF-8') . ',</p>'
+                    . '<p>Une demande de changement d adresse email a été initiée pour votre compte SyDRA.</p>'
+                    . '<p>Nouvelle adresse demandée: <strong>' . htmlspecialchars($newEmail, ENT_QUOTES, 'UTF-8') . '</strong></p>'
+                    . '<p style="margin:20px 0 8px;">'
+                    . '<a href="' . htmlspecialchars($confirmUrl, ENT_QUOTES, 'UTF-8') . '" style="display:inline-block;background:#005bbb;color:#fff;text-decoration:none;font-weight:700;padding:12px 18px;border-radius:8px;">Confirmer ma nouvelle adresse</a>'
+                    . '</p>'
+                    . '<p style="font-size:12px;color:#475569;">Ce lien expire dans ' . (int) $expiresHours . ' heures. Si vous n êtes pas à l origine de cette demande, ignorez ce message.</p>'
+                    . '</div></div></body></html>';
+
+                $mailResult = sendAppMailDetailed($config, $newEmail, 'Confirmez votre nouvelle adresse email SyDRA', $html, true);
+                if ((bool) ($mailResult['success'] ?? false)) {
+                    $mailMessage = ' Un email de confirmation (' . (int) $expiresHours . 'h) a été envoyé à la nouvelle adresse.';
+                } else {
+                    $errorMsg = trim((string) ($mailResult['error'] ?? 'Erreur inconnue.'));
+                    $mailMessage = ' Demande email enregistrée, mais envoi SMTP en échec: ' . $errorMsg;
+                }
+            }
+        }
+
+        set_flash('success', 'Utilisateur mis à jour.' . $mailMessage);
         header('Location: ?page=utilisateurs');
         exit;
     }
@@ -2024,7 +2223,13 @@ if ($method === 'POST') {
 
         $reportId = (int) ($_POST['report_id'] ?? 0);
         $decision = trim((string) ($_POST['decision'] ?? ''));
-        $message = trim((string) ($_POST['decision_message'] ?? ''));
+        $decisionReason = trim((string) ($_POST['decision_reason'] ?? ''));
+        $decisionComment = trim((string) ($_POST['decision_comment'] ?? ''));
+        $legacyMessage = trim((string) ($_POST['decision_message'] ?? ''));
+
+        if ($decisionComment === '' && $legacyMessage !== '') {
+            $decisionComment = $legacyMessage;
+        }
 
         if ($reportId <= 0 || !in_array($decision, ['publish', 'request_info', 'reject'], true)) {
             set_flash('error', 'Décision invalide.');
@@ -2055,14 +2260,29 @@ if ($method === 'POST') {
             exit;
         }
 
-        if ($decision === 'request_info' && $message === '') {
-            set_flash('error', 'Veuillez saisir un message pour la demande d informations supplémentaires.');
+        if ($decision === 'request_info' && $decisionReason === '') {
+            set_flash('error', 'Veuillez sélectionner une raison pour la demande d informations supplémentaires.');
+            header('Location: ?page=rapportage-voir&id=' . urlencode((string) $reportId));
+            exit;
+        }
+
+        if ($decision === 'reject' && $decisionReason === '') {
+            set_flash('error', 'Veuillez sélectionner une raison pour le rejet.');
             header('Location: ?page=rapportage-voir&id=' . urlencode((string) $reportId));
             exit;
         }
 
         $statusLabel = 'Soumis';
         $historyNote = null;
+
+        $decisionNoteParts = [];
+        if ($decisionReason !== '') {
+            $decisionNoteParts[] = 'Raison: ' . $decisionReason;
+        }
+        if ($decisionComment !== '') {
+            $decisionNoteParts[] = 'Commentaire: ' . $decisionComment;
+        }
+        $decisionNote = trim(implode(' | ', $decisionNoteParts));
 
         if ($decision === 'publish') {
             $updateStmt = $pdo->prepare('UPDATE reports
@@ -2090,7 +2310,7 @@ if ($method === 'POST') {
                 'id' => $reportId,
             ]);
             $statusLabel = 'En révision';
-            $historyNote = $message;
+            $historyNote = $decisionNote !== '' ? $decisionNote : 'Informations supplémentaires demandées par le Lead GTMP.';
         } else {
             $updateStmt = $pdo->prepare('UPDATE reports
                                          SET workflow_status = :workflow_status,
@@ -2101,7 +2321,7 @@ if ($method === 'POST') {
                 'id' => $reportId,
             ]);
             $statusLabel = 'Rejeté';
-            $historyNote = $message !== '' ? $message : 'Rapport rejeté par le Lead GTMP.';
+            $historyNote = $decisionNote !== '' ? $decisionNote : 'Rapport rejeté par le Lead GTMP.';
         }
 
         $historyStmt = $pdo->prepare('INSERT INTO report_status_history (report_id, status_label, event_note, changed_by)
@@ -2263,7 +2483,7 @@ $pageMap = [
     'rapportage' => ['file' => __DIR__ . '/pages/rapportage/index.php', 'title' => 'Rapportage'],
     'rapportage-liste-user' => ['file' => __DIR__ . '/pages/rapportage-liste-user.php', 'title' => 'Mes rapports'],
     'rapportage-admin-list' => ['file' => __DIR__ . '/pages/rapportage-admin-list.php', 'title' => 'Tour de controle GTMP'],
-    'rapportage-voir' => ['file' => __DIR__ . '/pages/rapportage_voir.php', 'title' => 'Detail du rapport'],
+    'rapportage-voir' => ['file' => __DIR__ . '/pages/rapportage/details.php', 'title' => 'Detail du rapport'],
     'rapportage-creer-AI' => ['file' => __DIR__ . '/pages/rapportage/creer_ia.php', 'title' => 'Creation assistee IA'],
     'rapportage-creer-wizar' => ['file' => __DIR__ . '/pages/rapportage/creer_wizard.php', 'title' => 'Creation manuelle Wizard'],
     'rapport_creer' => ['file' => __DIR__ . '/pages/reports_create.php', 'title' => 'Nouveau rapport'],
@@ -2288,12 +2508,6 @@ if ($page === 'utilisateurs' && !can_manage_users($authUser)) {
     exit;
 }
 
-if ($page === 'stats' && !is_lead_gtmp($authUser) && !is_admin($authUser)) {
-    http_response_code(403);
-    echo 'Accès interdit.';
-    exit;
-}
-
 if ($page === 'rapportage-admin-list' && !is_lead_gtmp($authUser) && !is_admin($authUser)) {
     http_response_code(403);
     echo 'Accès interdit.';
@@ -2313,6 +2527,8 @@ $statsGlobalTrend = ['labels' => [], 'totals' => [], 'flash' => [], 'note' => []
 $statsUrgencyDistribution = ['labels' => [], 'values' => []];
 $emailChangeRequest = null;
 $rapportageMapAlerts = [];
+$rapportageOrganizations = [];
+$rapportageStats = ['total' => 0, 'critiques' => 0, 'attente' => 0, 'valides' => 0];
 $rapportageRecentProvinceAlerts = [];
 $rapportageUserReports = [];
 $rapportageAdminReports = [];
@@ -2320,6 +2536,10 @@ $rapportageView = null;
 $rapportageAttachments = [];
 $rapportageTimeline = [];
 $rapportageLatestSubmitted = null;
+$dashboardKpis = [];
+$dashboardRecentActivities = [];
+$dashboardRecentReports = [];
+$dashboardMapAlerts = [];
 $pdo = db($config);
 
 if ($page === 'rapports_liste') {
@@ -2361,20 +2581,44 @@ if ($page === 'rapportage' || $page === 'rapportage-liste-user' || $page === 'ra
     $hasReportType = has_table_column($config, 'reports', 'report_type');
     $hasUrgencyLevel = has_table_column($config, 'reports', 'urgency_level');
     $hasLocationText = has_table_column($config, 'reports', 'location_text');
+    $hasTerritory = has_table_column($config, 'reports', 'territory');
+    $hasLocality = has_table_column($config, 'reports', 'locality');
+    $hasVillage = has_table_column($config, 'reports', 'village');
     $hasTitle = has_table_column($config, 'reports', 'title');
     $hasContent = has_table_column($config, 'reports', 'content');
     $hasProvince = has_table_column($config, 'reports', 'province');
     $hasIncidentLabel = has_table_column($config, 'reports', 'incident_label');
     $hasGpsLat = has_table_column($config, 'reports', 'gps_lat');
     $hasGpsLng = has_table_column($config, 'reports', 'gps_lng');
+    $hasLatitude = has_table_column($config, 'reports', 'latitude');
+    $hasLongitude = has_table_column($config, 'reports', 'longitude');
     $hasVictimsCount = has_table_column($config, 'reports', 'victims_count');
+    $hasDisplacedHouseholds = has_table_column($config, 'reports', 'displaced_households');
     $hasAnalysis = has_table_column($config, 'reports', 'analysis_text');
     $hasAdditionalNotes = has_table_column($config, 'reports', 'additional_notes');
 
     $typeExpr = $hasReportType ? 'r.report_type' : '"FLASH"';
     $urgencyExpr = $hasUrgencyLevel ? 'r.urgency_level' : '"Moyenne"';
-    $locationExpr = $hasLocationText ? 'r.location_text' : 'NULL';
-    $provinceExpr = $hasProvince ? 'r.province' : $locationExpr;
+    $locationCandidates = [];
+    if ($hasLocationText) {
+        $locationCandidates[] = 'NULLIF(TRIM(r.location_text), "")';
+    }
+    if ($hasProvince) {
+        $locationCandidates[] = 'NULLIF(TRIM(r.province), "")';
+    }
+    if ($hasTerritory) {
+        $locationCandidates[] = 'NULLIF(TRIM(r.territory), "")';
+    }
+    if ($hasLocality) {
+        $locationCandidates[] = 'NULLIF(TRIM(r.locality), "")';
+    }
+    if ($hasVillage) {
+        $locationCandidates[] = 'NULLIF(TRIM(r.village), "")';
+    }
+    $locationExpr = $locationCandidates !== []
+        ? ('COALESCE(' . implode(', ', $locationCandidates) . ', "Non précisée")')
+        : '"Non précisée"';
+    $provinceExpr = $hasProvince ? 'NULLIF(TRIM(r.province), "")' : 'NULL';
     $incidentExpr = $hasIncidentLabel
         ? 'r.incident_label'
         : ($hasTitle ? 'r.title' : ($hasContent ? 'SUBSTRING(COALESCE(r.content, ""), 1, 120)' : 'CONCAT("Rapport #", r.id)'));
@@ -2383,9 +2627,15 @@ if ($page === 'rapportage' || $page === 'rapportage-liste-user' || $page === 'ra
         : ($hasContent ? 'SUBSTRING(COALESCE(r.content, ""), 1, 120)' : 'CONCAT("Rapport #", r.id)');
     $contentExpr = $hasContent ? 'r.content' : '""';
     $statusExpr = report_workflow_status_expr($config, 'r');
-    $gpsLatExpr = $hasGpsLat ? 'r.gps_lat' : 'NULL';
-    $gpsLngExpr = $hasGpsLng ? 'r.gps_lng' : 'NULL';
+    $statusNormalizedExpr = 'LOWER(REPLACE(REPLACE(REPLACE(COALESCE(' . $statusExpr . ', ""), "é", "e"), "è", "e"), "ê", "e"))';
+    $gpsLatExpr = $hasGpsLat
+        ? ($hasLatitude ? 'COALESCE(r.gps_lat, r.latitude)' : 'r.gps_lat')
+        : ($hasLatitude ? 'r.latitude' : 'NULL');
+    $gpsLngExpr = $hasGpsLng
+        ? ($hasLongitude ? 'COALESCE(r.gps_lng, r.longitude)' : 'r.gps_lng')
+        : ($hasLongitude ? 'r.longitude' : 'NULL');
     $victimsExpr = $hasVictimsCount ? 'r.victims_count' : 'NULL';
+    $displacedExpr = $hasDisplacedHouseholds ? 'r.displaced_households' : 'NULL';
     $analysisExpr = $hasAnalysis ? 'r.analysis_text' : 'NULL';
     $notesExpr = $hasAdditionalNotes ? 'r.additional_notes' : 'NULL';
 
@@ -2395,24 +2645,107 @@ if ($page === 'rapportage' || $page === 'rapportage-liste-user' || $page === 'ra
     $orgExpr = $reportUserFk !== null
         ? 'COALESCE(NULLIF(TRIM(u.organization_name), ""), u.full_name, "Organisation inconnue")'
         : '"Organisation inconnue"';
+    $orgEmailExpr = $reportUserFk !== null ? 'COALESCE(u.email, "")' : '""';
+    $orgSiteExpr = $reportUserFk !== null ? 'COALESCE(u.site_web, "")' : '""';
+    $orgLogoExpr = $reportUserFk !== null ? 'COALESCE(NULLIF(TRIM(u.logo_path), ""), u.avatar_path, "")' : '""';
     $userExpr = $reportUserFk !== null ? 'r.' . $reportUserFk : 'NULL';
 
     if ($page === 'rapportage') {
-        $mapStmt = $pdo->query('SELECT r.id,
-                                       ' . $typeExpr . ' AS report_type,
-                                       ' . $urgencyExpr . ' AS urgency_level,
-                                       ' . $locationExpr . ' AS location_text,
-                                       ' . $provinceExpr . ' AS province,
-                            ' . $gpsLatExpr . ' AS gps_lat,
-                            ' . $gpsLngExpr . ' AS gps_lng,
-                                       ' . $orgExpr . ' AS organization_name,
-                                       ' . $statusExpr . ' AS workflow_status,
-                                       r.created_at
-                                FROM reports r
-                                ' . $joinUserSql . '
-                                ORDER BY r.created_at DESC
-                                LIMIT 200');
+        $hasUserOrgId = has_table_column($config, 'users', 'organization_id');
+        $hasReportOrgId = has_table_column($config, 'reports', 'organization_id');
+
+        $rawDateDebut = trim((string) ($_GET['date_debut'] ?? ''));
+        $rawDateFin = trim((string) ($_GET['date_fin'] ?? ''));
+        $rawOrgId = trim((string) ($_GET['organisation_id'] ?? ''));
+
+        $dateDebut = preg_match('/^\d{4}-\d{2}-\d{2}$/', $rawDateDebut) === 1 ? $rawDateDebut : null;
+        $dateFin = preg_match('/^\d{4}-\d{2}-\d{2}$/', $rawDateFin) === 1 ? $rawDateFin : null;
+        $filterOrgId = ($rawOrgId !== '' && ctype_digit($rawOrgId)) ? (int) $rawOrgId : null;
+
+        // Détection robuste du rôle (schéma users.role ou users.role_id)
+        $userRole = strtoupper((string) ($authUser['role'] ?? $authUser['role_code'] ?? ''));
+        if ($userRole === '' && isset($authUser['id'])) {
+            $roleId = (int) ($authUser['role_id'] ?? 0);
+            if ($roleId > 0) {
+                $roleLookup = $pdo->prepare('SELECT COALESCE(code, "") FROM roles WHERE id = :id LIMIT 1');
+                $roleLookup->execute(['id' => $roleId]);
+                $userRole = strtoupper((string) $roleLookup->fetchColumn());
+            }
+        }
+        $isLeadOrAdmin = in_array($userRole, ['ADMIN', 'CLUSTER_LEADER', 'GTMP_LEAD', 'GTMP_COLEAD', 'CLUSTER_PROTECTION', 'LEAD_GTMP'], true);
+
+        $commonConditions = [];
+        $commonParams = [];
+        if ($dateDebut !== null) {
+            $commonConditions[] = 'r.created_at >= :date_debut';
+            $commonParams['date_debut'] = $dateDebut . ' 00:00:00';
+        }
+        if ($dateFin !== null) {
+            $commonConditions[] = 'r.created_at <= :date_fin';
+            $commonParams['date_fin'] = $dateFin . ' 23:59:59';
+        }
+
+        if ($isLeadOrAdmin && $filterOrgId !== null) {
+            if ($reportUserFk !== null && $hasUserOrgId) {
+                $commonConditions[] = 'u.organization_id = :org_id';
+                $commonParams['org_id'] = $filterOrgId;
+            } elseif ($hasReportOrgId) {
+                $commonConditions[] = 'r.organization_id = :org_id';
+                $commonParams['org_id'] = $filterOrgId;
+            }
+        }
+
+        if (!$isLeadOrAdmin && $reportUserFk !== null) {
+            $commonConditions[] = 'r.' . $reportUserFk . ' = :reporter_uid';
+            $commonParams['reporter_uid'] = (int) ($authUser['id'] ?? 0);
+        }
+
+        $commonWhere = $commonConditions !== [] ? (' WHERE ' . implode(' AND ', $commonConditions)) : '';
+
+        $mapSql = 'SELECT r.id,
+                          ' . $typeExpr . ' AS report_type,
+                          ' . $urgencyExpr . ' AS urgency_level,
+                          ' . $locationExpr . ' AS location_text,
+                          ' . $provinceExpr . ' AS province,
+                          ' . $gpsLatExpr . ' AS gps_lat,
+                          ' . $gpsLngExpr . ' AS gps_lng,
+                          ' . $orgExpr . ' AS organization_name,
+                          ' . $statusExpr . ' AS workflow_status,
+                          r.created_at
+                   FROM reports r
+                   ' . $joinUserSql
+                   . $commonWhere . '
+                   ORDER BY r.created_at DESC
+                   LIMIT 200';
+        $mapStmt = $pdo->prepare($mapSql);
+        $mapStmt->execute($commonParams);
         $rapportageMapAlerts = $mapStmt->fetchAll();
+
+        $statsStmt = $pdo->prepare('
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN LOWER(COALESCE(r.urgency_level, "")) LIKE "%crit%" THEN 1 ELSE 0 END) AS critiques,
+                SUM(CASE WHEN LOWER(COALESCE(r.workflow_status, "")) IN ("soumis", "submitted", "en revue", "under_review") THEN 1 ELSE 0 END) AS attente,
+                SUM(CASE WHEN LOWER(COALESCE(r.workflow_status, "")) IN ("approuve", "approved", "publie") THEN 1 ELSE 0 END) AS valides
+            FROM reports r
+            ' . $joinUserSql
+            . $commonWhere);
+        $statsStmt->execute($commonParams);
+        $rawStats = $statsStmt->fetch();
+        if (is_array($rawStats)) {
+            $rapportageStats = [
+                'total'     => (int) ($rawStats['total'] ?? 0),
+                'critiques' => (int) ($rawStats['critiques'] ?? 0),
+                'attente'   => (int) ($rawStats['attente'] ?? 0),
+                'valides'   => (int) ($rawStats['valides'] ?? 0),
+            ];
+        }
+
+        // Liste organisations pour les rôles lead/admin
+        if ($isLeadOrAdmin) {
+            $orgStmt = $pdo->query('SELECT id, name FROM organizations WHERE is_active = 1 ORDER BY name ASC');
+            $rapportageOrganizations = $orgStmt->fetchAll();
+        }
 
         $currentProvince = trim((string) ($_GET['province'] ?? ''));
         if ($currentProvince === '' && $reportUserFk !== null && is_array($authUser)) {
@@ -2455,15 +2788,46 @@ if ($page === 'rapportage' || $page === 'rapportage-liste-user' || $page === 'ra
     }
 
     if ($page === 'rapportage-liste-user' && is_array($authUser)) {
-        if ($reportUserFk !== null) {
+        $isLeadOrAdminList = is_lead_gtmp($authUser) || is_admin($authUser);
+        $authUserIdForList = (int) ($authUser['id'] ?? 0);
+        $ownerExprList = $reportUserFk !== null ? 'r.' . $reportUserFk : 'NULL';
+        $orgExprList = $reportUserFk !== null
+            ? 'COALESCE(NULLIF(TRIM(u.organization_name), ""), u.full_name, "Organisation")'
+            : '"Organisation"';
+        $joinUserSqlList = $reportUserFk !== null
+            ? 'LEFT JOIN users u ON u.id = r.' . $reportUserFk
+            : '';
+        $statusNormExprList = 'LOWER(REPLACE(REPLACE(REPLACE(' . $statusExpr . ', "é", "e"), "è", "e"), "ê", "e"))';
+
+        if ($isLeadOrAdminList) {
             $userStmt = $pdo->prepare('SELECT r.id,
                                               r.created_at,
                                               ' . $typeExpr . ' AS report_type,
                                               ' . $locationExpr . ' AS location_text,
                                               ' . $incidentExpr . ' AS incident_label,
                                               ' . $statusExpr . ' AS workflow_status,
-                                              ' . $urgencyExpr . ' AS urgency_level
+                                              ' . $urgencyExpr . ' AS urgency_level,
+                                              ' . $ownerExprList . ' AS owner_user_id,
+                                              ' . $orgExprList . ' AS organization_name
                                        FROM reports r
+                                       ' . $joinUserSqlList . '
+                                       WHERE (' . $statusNormalizedExpr . ' <> "brouillon" OR ' . $ownerExprList . ' = :current_user_id)
+                                       ORDER BY r.created_at DESC
+                                       LIMIT 800');
+            $userStmt->execute(['current_user_id' => (int) ($authUser['id'] ?? 0)]);
+            $rapportageUserReports = $userStmt->fetchAll();
+        } elseif ($reportUserFk !== null) {
+            $userStmt = $pdo->prepare('SELECT r.id,
+                                              r.created_at,
+                                              ' . $typeExpr . ' AS report_type,
+                                              ' . $locationExpr . ' AS location_text,
+                                              ' . $incidentExpr . ' AS incident_label,
+                                              ' . $statusExpr . ' AS workflow_status,
+                                              ' . $urgencyExpr . ' AS urgency_level,
+                                              ' . $ownerExprList . ' AS owner_user_id,
+                                              ' . $orgExprList . ' AS organization_name
+                                       FROM reports r
+                                       ' . $joinUserSqlList . '
                                        WHERE r.' . $reportUserFk . ' = :user_id
                                        ORDER BY r.created_at DESC
                                        LIMIT 500');
@@ -2473,18 +2837,20 @@ if ($page === 'rapportage' || $page === 'rapportage-liste-user' || $page === 'ra
     }
 
     if ($page === 'rapportage-admin-list') {
-        $adminStmt = $pdo->query('SELECT r.id,
-                                         r.created_at,
-                                         ' . $typeExpr . ' AS report_type,
-                                         ' . $locationExpr . ' AS location_text,
-                                         ' . $incidentExpr . ' AS incident_label,
-                                         ' . $statusExpr . ' AS workflow_status,
-                                         ' . $urgencyExpr . ' AS urgency_level,
-                                         ' . $orgExpr . ' AS organization_name
-                                  FROM reports r
-                                  ' . $joinUserSql . '
-                                  ORDER BY r.created_at DESC
-                                  LIMIT 800');
+        $adminStmt = $pdo->prepare('SELECT r.id,
+                                           r.created_at,
+                                           ' . $typeExpr . ' AS report_type,
+                                           ' . $locationExpr . ' AS location_text,
+                                           ' . $incidentExpr . ' AS incident_label,
+                                           ' . $statusExpr . ' AS workflow_status,
+                                           ' . $urgencyExpr . ' AS urgency_level,
+                                           ' . $orgExpr . ' AS organization_name
+                                    FROM reports r
+                                    ' . $joinUserSql . '
+                                    WHERE (' . $statusNormalizedExpr . ' <> "brouillon" OR ' . $userExpr . ' = :current_user_id)
+                                    ORDER BY r.created_at DESC
+                                    LIMIT 800');
+        $adminStmt->execute(['current_user_id' => (int) ($authUser['id'] ?? 0)]);
         $rapportageAdminReports = $adminStmt->fetchAll();
 
         $latestSubmittedStmt = $pdo->query('SELECT r.id
@@ -2516,6 +2882,7 @@ if ($page === 'rapportage' || $page === 'rapportage-liste-user' || $page === 'ra
                                             ' . $gpsLatExpr . ' AS gps_lat,
                                             ' . $gpsLngExpr . ' AS gps_lng,
                                             ' . $victimsExpr . ' AS victims_count,
+                                            ' . $displacedExpr . ' AS displaced_households,
                                             ' . $analysisExpr . ' AS analysis_text,
                                             ' . $notesExpr . ' AS additional_notes,
                                             r.created_at,
@@ -2525,6 +2892,9 @@ if ($page === 'rapportage' || $page === 'rapportage-liste-user' || $page === 'ra
                                             r.published_at,
                                             r.rejected_at,
                                             ' . $orgExpr . ' AS organization_name,
+                                              ' . $orgEmailExpr . ' AS organization_email,
+                                              ' . $orgSiteExpr . ' AS organization_site_web,
+                                              ' . $orgLogoExpr . ' AS organization_logo_path,
                                             ' . $userExpr . ' AS owner_user_id
                                      FROM reports r
                                      ' . $joinUserSql . '
@@ -2542,6 +2912,14 @@ if ($page === 'rapportage' || $page === 'rapportage-liste-user' || $page === 'ra
         $ownerId = (int) ($rapportageView['owner_user_id'] ?? 0);
         $isDecisionRole = is_lead_gtmp($authUser) || is_admin($authUser);
         if (!$isDecisionRole && is_array($authUser) && $ownerId > 0 && $ownerId !== (int) ($authUser['id'] ?? 0)) {
+            http_response_code(403);
+            echo 'Accès interdit.';
+            exit;
+        }
+
+        $statusRaw = (string) ($rapportageView['workflow_status'] ?? '');
+        $statusNormalized = strtolower(trim(str_replace(['é', 'è', 'ê'], 'e', $statusRaw)));
+        if ($isDecisionRole && $statusNormalized === 'brouillon' && $ownerId > 0 && $ownerId !== (int) ($authUser['id'] ?? 0)) {
             http_response_code(403);
             echo 'Accès interdit.';
             exit;
@@ -2731,11 +3109,12 @@ if ($page === 'stats' && (is_lead_gtmp($authUser) || is_admin($authUser))) {
     $topLabels = [];
     $topValues = [];
     if ($reportUserFk !== null) {
-        $topStmt = $pdo->query('SELECT COALESCE(NULLIF(TRIM(u.organization_name), ""), u.full_name, "Organisation inconnue") AS organization_name,
+        $topOrgExpr = 'COALESCE(NULLIF(TRIM(u.organization_name), ""), u.full_name, "Organisation inconnue")';
+        $topStmt = $pdo->query('SELECT ' . $topOrgExpr . ' AS organization_name,
                                        COUNT(*) AS total
                                 FROM reports r
                                 LEFT JOIN users u ON u.id = r.' . $reportUserFk . '
-                                GROUP BY organization_name
+                                GROUP BY ' . $topOrgExpr . '
                                 ORDER BY total DESC
                                 LIMIT 8');
         foreach ($topStmt->fetchAll() as $topRow) {
@@ -2869,6 +3248,142 @@ if ($page === 'tableau_de_bord' && (is_lead_gtmp($authUser) || is_admin($authUse
           ORDER BY r.created_at DESC
           LIMIT 40');
     $urgentAlerts = $stmt->fetchAll();
+}
+
+if ($page === 'tableau_de_bord' && is_array($authUser)) {
+    $reportUserFk = reports_user_fk_column($config);
+    $hasUrgencyLevel = has_table_column($config, 'reports', 'urgency_level');
+    $hasReportType = has_table_column($config, 'reports', 'report_type');
+    $hasLocationText = has_table_column($config, 'reports', 'location_text');
+    $hasProvince = has_table_column($config, 'reports', 'province');
+    $hasTerritory = has_table_column($config, 'reports', 'territory');
+    $hasLocality = has_table_column($config, 'reports', 'locality');
+    $hasVillage = has_table_column($config, 'reports', 'village');
+    $hasGpsLat = has_table_column($config, 'reports', 'gps_lat');
+    $hasGpsLng = has_table_column($config, 'reports', 'gps_lng');
+    $hasLatitude = has_table_column($config, 'reports', 'latitude');
+    $hasLongitude = has_table_column($config, 'reports', 'longitude');
+    $hasSeverityId = has_table_column($config, 'reports', 'severity_id');
+    $urgencyExpr = $hasUrgencyLevel ? 'r.urgency_level' : '"Moyenne"';
+    $typeExpr = $hasReportType ? 'r.report_type' : '"FLASH"';
+    $locationCandidates = [];
+    if ($hasLocationText) {
+        $locationCandidates[] = 'NULLIF(TRIM(r.location_text), "")';
+    }
+    if ($hasProvince) {
+        $locationCandidates[] = 'NULLIF(TRIM(r.province), "")';
+    }
+    if ($hasTerritory) {
+        $locationCandidates[] = 'NULLIF(TRIM(r.territory), "")';
+    }
+    if ($hasLocality) {
+        $locationCandidates[] = 'NULLIF(TRIM(r.locality), "")';
+    }
+    if ($hasVillage) {
+        $locationCandidates[] = 'NULLIF(TRIM(r.village), "")';
+    }
+    $locationExpr = $locationCandidates !== []
+        ? ('COALESCE(' . implode(', ', $locationCandidates) . ', "Non précisée")')
+        : '"Non précisée"';
+    $gpsLatExpr = $hasGpsLat
+        ? ($hasLatitude ? 'COALESCE(r.gps_lat, r.latitude)' : 'r.gps_lat')
+        : ($hasLatitude ? 'r.latitude' : 'NULL');
+    $gpsLngExpr = $hasGpsLng
+        ? ($hasLongitude ? 'COALESCE(r.gps_lng, r.longitude)' : 'r.gps_lng')
+        : ($hasLongitude ? 'r.longitude' : 'NULL');
+    $severityExpr = $hasSeverityId ? 'r.severity_id' : 'NULL';
+    $statusExpr = report_workflow_status_expr($config, 'r');
+    $statusNormalizedExpr = 'LOWER(REPLACE(REPLACE(REPLACE(COALESCE(' . $statusExpr . ', ""), "é", "e"), "è", "e"), "ê", "e"))';
+    $isLeadOrAdminDashboard = is_lead_gtmp($authUser) || is_admin($authUser);
+    $joinUserSql = $reportUserFk !== null
+        ? 'LEFT JOIN users u ON u.id = r.' . $reportUserFk
+        : '';
+    $orgExpr = $reportUserFk !== null
+        ? 'COALESCE(NULLIF(TRIM(u.organization_name), ""), u.full_name, "Organisation")'
+        : '"Organisation"';
+    $userExpr = $reportUserFk !== null ? 'r.' . $reportUserFk : 'NULL';
+
+    $recentSql = 'SELECT r.id,
+                         r.created_at,
+                         ' . $typeExpr . ' AS report_type,
+                         ' . $locationExpr . ' AS location_text,
+                         ' . $statusExpr . ' AS workflow_status,
+                         ' . $orgExpr . ' AS organization_name
+                  FROM reports r
+                  ' . $joinUserSql;
+    $recentParams = [];
+    if (!$isLeadOrAdminDashboard && $reportUserFk !== null) {
+        $recentSql .= ' WHERE r.' . $reportUserFk . ' = :user_id';
+        $recentParams['user_id'] = (int) ($authUser['id'] ?? 0);
+    }
+    $recentSql .= ' ORDER BY r.created_at DESC LIMIT 5';
+    $recentStmt = $pdo->prepare($recentSql);
+    $recentStmt->execute($recentParams);
+    $dashboardRecentReports = $recentStmt->fetchAll() ?: [];
+
+    $mapSql = 'SELECT r.id,
+                      ' . $typeExpr . ' AS report_type,
+                      ' . $urgencyExpr . ' AS urgency_level,
+                      ' . $locationExpr . ' AS location_text,
+                      ' . $statusExpr . ' AS workflow_status,
+                      ' . $severityExpr . ' AS severity_id,
+                      ' . $gpsLatExpr . ' AS gps_lat,
+                      ' . $gpsLngExpr . ' AS gps_lng,
+                      ' . $orgExpr . ' AS organization_name,
+                      r.created_at
+               FROM reports r
+               ' . $joinUserSql;
+    $mapParams = [];
+    if (!$isLeadOrAdminDashboard && $reportUserFk !== null) {
+        $mapSql .= ' WHERE (r.' . $reportUserFk . ' = :user_id OR ' . $statusNormalizedExpr . ' IN ("valide", "validee", "approuve", "approuvé", "approved", "publie", "published"))';
+        $mapParams['user_id'] = (int) ($authUser['id'] ?? 0);
+    }
+    $mapSql .= ' ORDER BY r.created_at DESC LIMIT 300';
+    $mapStmt = $pdo->prepare($mapSql);
+    $mapStmt->execute($mapParams);
+    $dashboardMapAlerts = $mapStmt->fetchAll() ?: [];
+
+    if ($isLeadOrAdminDashboard) {
+        $globalStmt = $pdo->query('SELECT
+                                        COUNT(*) AS total_reports,
+                                        SUM(CASE WHEN DATE_FORMAT(r.created_at, "%Y-%m") = DATE_FORMAT(CURRENT_DATE, "%Y-%m") THEN 1 ELSE 0 END) AS month_reports,
+                                        SUM(CASE WHEN ' . $statusNormalizedExpr . ' IN ("soumis", "submitted", "en revision", "en revue", "under_review") THEN 1 ELSE 0 END) AS pending_reports,
+                                        SUM(CASE WHEN ' . $statusNormalizedExpr . ' IN ("approuve", "approuvé", "approved", "publie", "valide", "validee") THEN 1 ELSE 0 END) AS approved_reports
+                                    FROM reports r');
+        $global = $globalStmt->fetch() ?: [];
+
+        $activeOrgCount = 0;
+        if ($reportUserFk !== null) {
+            $orgCountStmt = $pdo->query('SELECT COUNT(DISTINCT r.' . $reportUserFk . ') FROM reports r');
+            $activeOrgCount = (int) $orgCountStmt->fetchColumn();
+        }
+
+        $dashboardKpis = [
+            ['label' => 'Rapports ce mois', 'value' => (int) ($global['month_reports'] ?? 0), 'icon' => 'fa-calendar-days'],
+            ['label' => 'En attente validation', 'value' => (int) ($global['pending_reports'] ?? 0), 'icon' => 'fa-hourglass-half'],
+            ['label' => 'Validés / publiés', 'value' => (int) ($global['approved_reports'] ?? 0), 'icon' => 'fa-badge-check'],
+            ['label' => 'Organisations actives', 'value' => $activeOrgCount, 'icon' => 'fa-building'],
+        ];
+    } else {
+        if ($reportUserFk !== null) {
+            $orgStmt = $pdo->prepare('SELECT
+                                            SUM(CASE WHEN DATE_FORMAT(r.created_at, "%Y-%m") = DATE_FORMAT(CURRENT_DATE, "%Y-%m") THEN 1 ELSE 0 END) AS month_reports,
+                                            SUM(CASE WHEN ' . $statusNormalizedExpr . ' IN ("soumis", "submitted", "en revision", "en revue", "under_review") THEN 1 ELSE 0 END) AS pending_reports,
+                                            SUM(CASE WHEN ' . $statusNormalizedExpr . ' IN ("approuve", "approuvé", "approved", "publie", "valide", "validee") THEN 1 ELSE 0 END) AS approved_reports,
+                                            SUM(CASE WHEN ' . $statusNormalizedExpr . ' = "brouillon" THEN 1 ELSE 0 END) AS draft_reports
+                                        FROM reports r
+                                        WHERE r.' . $reportUserFk . ' = :user_id');
+            $orgStmt->execute(['user_id' => (int) ($authUser['id'] ?? 0)]);
+            $orgStats = $orgStmt->fetch() ?: [];
+
+            $dashboardKpis = [
+                ['label' => 'Vos alertes ce mois', 'value' => (int) ($orgStats['month_reports'] ?? 0), 'icon' => 'fa-calendar-days'],
+                ['label' => 'En attente validation', 'value' => (int) ($orgStats['pending_reports'] ?? 0), 'icon' => 'fa-hourglass-half'],
+                ['label' => 'Validées / publiées', 'value' => (int) ($orgStats['approved_reports'] ?? 0), 'icon' => 'fa-badge-check'],
+                ['label' => 'Brouillons en cours', 'value' => (int) ($orgStats['draft_reports'] ?? 0), 'icon' => 'fa-pen-to-square'],
+            ];
+        }
+    }
 }
 
 if (is_array($authUser)) {
