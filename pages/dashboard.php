@@ -11,6 +11,13 @@ $subtitle = $isDecisionRole
     ? 'Espace de coordination GTMP'
     : 'Votre espace de rapportage';
 
+$heroPrimaryHref = $isDecisionRole ? '?page=rapportage-admin-list' : '?page=rapportage-creer-wizar';
+$heroPrimaryLabel = $isDecisionRole ? 'Gérer les alertes' : 'Nouvelle alerte';
+$heroPrimaryIcon = $isDecisionRole ? 'bi bi-kanban-fill' : 'bi bi-plus-circle-fill';
+$heroSecondaryHref = $isDecisionRole ? '?page=rapportage-liste-user' : '?page=rapportage';
+$heroSecondaryLabel = $isDecisionRole ? 'Consulter mes alertes' : 'Commencer le rapportage';
+$heroSecondaryIcon = $isDecisionRole ? 'bi bi-folder2-open' : 'bi bi-compass';
+
 $tips = [
     'Un rapport Flash doit rester concis, factuel et daté.',
     'Utilisez le mode IA pour structurer rapidement vos notes longues.',
@@ -132,11 +139,14 @@ $statusNormalized = static function (string $status): string {
                 <h1 class="mb-1">Bienvenue sur SyDRA, <?= htmlspecialchars($displayName, ENT_QUOTES, 'UTF-8'); ?></h1>
                 <p class="text-muted mb-0"><?= htmlspecialchars($subtitle, ENT_QUOTES, 'UTF-8'); ?></p>
             </div>
-            <?php if ($isDecisionRole): ?>
-                <a href="?page=stats" class="btn btn-primary"><i class="fa-solid fa-chart-line me-1"></i>Statistiques avancées</a>
-            <?php else: ?>
-                <a href="?page=rapportage-creer-wizar" class="btn btn-primary"><i class="fa-solid fa-plus me-1"></i>Nouveau rapport</a>
-            <?php endif; ?>
+            <div class="d-flex flex-wrap gap-2">
+                <a href="<?= htmlspecialchars($heroPrimaryHref, ENT_QUOTES, 'UTF-8'); ?>" class="btn btn-primary">
+                    <i class="<?= htmlspecialchars($heroPrimaryIcon, ENT_QUOTES, 'UTF-8'); ?> me-1"></i><?= htmlspecialchars($heroPrimaryLabel, ENT_QUOTES, 'UTF-8'); ?>
+                </a>
+                <a href="<?= htmlspecialchars($heroSecondaryHref, ENT_QUOTES, 'UTF-8'); ?>" class="btn btn-outline-primary">
+                    <i class="<?= htmlspecialchars($heroSecondaryIcon, ENT_QUOTES, 'UTF-8'); ?> me-1"></i><?= htmlspecialchars($heroSecondaryLabel, ENT_QUOTES, 'UTF-8'); ?>
+                </a>
+            </div>
         </div>
     </section>
 

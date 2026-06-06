@@ -1,5 +1,15 @@
 # SyDRA - Application web de rapportage et alerte
 
+## Version et suivi
+
+- Version courante: `v0.9.0`
+- Derniere mise a jour: `2026-06-06`
+- Canal: `main`
+
+Historique rapide:
+
+- `v0.9.0` (2026-06-06): durcissement workflow de decision (JSON robuste, warning SMTP), verrouillage/reouverture de decision, corrections redirections login/session, guide de deploiement production enrichi.
+
 SyDRA (Systeme de Documentation, de Rapportage et d'Alerte) est une application PHP/MySQL simple, sans MVC lourd, utilisee pour la saisie, le suivi et la coordination d'informations terrain.
 
 ## 1) Ce que fait l'application

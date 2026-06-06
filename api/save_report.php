@@ -1,5 +1,24 @@
 <?php
 
+/**
+ * api/save_report.php
+ *
+ * ROLE DU FICHIER:
+ * - Reçoit la soumission AJAX du Wizard Rapportage (FLASH).
+ * - Valide les champs obligatoires, applique la codification sensible,
+ *   puis insère le rapport dans la table reports.
+ * - Enregistre l'historique de statut et gère l'upload des pièces jointes.
+ *
+ * Entrées principales:
+ * - Localisation: province, territory, health_zone, groupement, village
+ * - Incident: incident_type, urgency_level, victims_count, displaced_households
+ * - Contenu: description, analyse, priority_needs, recommandations
+ * - Contrôle: status_action (Brouillon/Soumis), csrf
+ *
+ * Sortie:
+ * - JSON { ok, report_id, status, message }
+ */
+
 declare(strict_types=1);
 
 session_start();

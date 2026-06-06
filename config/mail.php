@@ -242,6 +242,7 @@ if (!function_exists('sendAppMail')) {
             'cta_url' => (string) ($template['cta_url'] ?? ''),
             'variant' => (string) ($template['variant'] ?? 'standard'),
             'app_name' => (string) ($config['app_name'] ?? 'SyDRA'),
+            'logo_url' => rtrim((string) ($config['app_url'] ?? ''), '/') . '/assets/img/sydra-logo/WHITE-PRIMARY-SYDRA-LOGO.png',
         ];
 
         $html = sydra_mail_render_layout($mailMeta);

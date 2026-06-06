@@ -606,6 +606,29 @@ if ($decisionSubmittedRaw !== '') {
             var mail = data && data.mail ? data.mail : { attempted: false, success: false, error: '' };
             var warningText = data && data.warning ? String(data.warning) : '';
 
+            function statusIconHtml(statusValue) {
+                var normalized = String(statusValue || '')
+                    .toLowerCase()
+                    .normalize('NFD')
+                    .replace(/[\u0300-\u036f]/g, '')
+                    .trim();
+
+                if (normalized.indexOf('approuve') !== -1 || normalized.indexOf('valide') !== -1 || normalized.indexOf('publie') !== -1) {
+                    return '<i class="bi bi-patch-check-fill text-success me-1"></i>';
+                }
+                if (normalized.indexOf('revision') !== -1 || normalized.indexOf('revue') !== -1 || normalized.indexOf('demande') !== -1) {
+                    return '<i class="bi bi-hourglass-split text-warning me-1"></i>';
+                }
+                if (normalized.indexOf('rejet') !== -1) {
+                    return '<i class="bi bi-x-octagon-fill text-danger me-1"></i>';
+                }
+                if (normalized.indexOf('soumis') !== -1) {
+                    return '<i class="bi bi-send-check-fill text-primary me-1"></i>';
+                }
+
+                return '<i class="bi bi-info-circle-fill text-secondary me-1"></i>';
+            }
+
             if (!(window.Swal && typeof window.Swal.fire === 'function')) {
                 window.alert((warningText !== '' ? warningText : (actionTitle + ' : ' + statusText)));
                 return Promise.resolve();
@@ -616,7 +639,7 @@ if ($decisionSubmittedRaw !== '') {
                     icon: 'warning',
                     title: actionTitle + ' enregistrée',
                     html: '<div style="text-align:left;">'
-                        + '<p><strong>Statut:</strong> ' + escapeHtml(statusText) + '</p>'
+                        + '<p><strong>Statut:</strong> ' + statusIconHtml(statusText) + escapeHtml(statusText) + '</p>'
                         + '<p style="margin-bottom:0;color:#b45309;">' + escapeHtml(warningText) + '</p>'
                         + '</div>',
                     confirmButtonText: 'Compris',
@@ -642,7 +665,7 @@ if ($decisionSubmittedRaw !== '') {
                 icon: 'success',
                 title: actionTitle + ' soumis avec succès',
                 html: '<div style="text-align:left;">'
-                    + '<p><strong>Statut:</strong> ' + escapeHtml(statusText) + '</p>'
+                    + '<p><strong>Statut:</strong> ' + statusIconHtml(statusText) + escapeHtml(statusText) + '</p>'
                     + '<p><strong>Serveur:</strong> mise à jour en base confirmée.</p>'
                     + '<p style="margin-bottom:0;"><strong>Email:</strong> '
                     + (mail.attempted ? 'notification envoyée.' : 'aucun destinataire email disponible, notification in-app uniquement.')

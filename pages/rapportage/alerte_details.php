@@ -41,7 +41,7 @@ $hasLocation = $hasColumn('location_text');
 $hasUrgency = $hasColumn('urgency_level');
 
 $reportUserFk = null;
-foreach (['user_id', 'author_id', 'created_by', 'reporter_id'] as $candidate) {
+foreach (['user_id', 'author_id', 'created_by', 'reporter_id', 'reporter_user_id'] as $candidate) {
     if ($hasColumn($candidate)) {
         $reportUserFk = $candidate;
         break;
@@ -80,6 +80,8 @@ if (!is_array($report)) {
     echo 'Alerte introuvable.';
     exit;
 }
+
+$autoPrint = ((string) ($_GET['print'] ?? '0')) === '1';
 ?>
 <!doctype html>
 <html lang="fr">
@@ -108,7 +110,15 @@ if (!is_array($report)) {
     <p><strong>Date:</strong> <?= htmlspecialchars((string) $report['created_at'], ENT_QUOTES, 'UTF-8'); ?></p>
     <hr>
     <p><?= nl2br(htmlspecialchars((string) $report['content'], ENT_QUOTES, 'UTF-8')); ?></p>
-    <p><a href="<?= htmlspecialchars($appUrl . '/?page=rapports_liste', ENT_QUOTES, 'UTF-8'); ?>">Retour aux rapports</a></p>
+    <p><a href="<?= htmlspecialchars($appUrl . '/?page=rapportage-voir&id=' . (int) $report['id'], ENT_QUOTES, 'UTF-8'); ?>">Retour au détail</a></p>
 </div>
+
+<?php if ($autoPrint): ?>
+<script>
+window.addEventListener('load', function () {
+    window.print();
+});
+</script>
+<?php endif; ?>
 </body>
 </html>

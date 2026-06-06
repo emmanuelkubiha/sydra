@@ -1,13 +1,61 @@
 <?php
 /**
- * Hub d'accueil du module Rapportage SyDRA.
- * UI premium + carte Leaflet verrouillee sur Sud-Kivu / Maniema.
+ * Hub Rapportage SyDRA
+ * - Filtres AJAX sécurisés
+ * - Carte Leaflet + légende
+ * - KPI + graphiques dynamiques Chart.js
  */
 
 /** @var array<int, array<string, mixed>> $rapportageMapAlerts */
+/** @var array<string, int> $rapportageStats */
+/** @var array<int, array<string, mixed>> $rapportageOrganizations */
+/** @var array<string, mixed>|null $authUser */
+
 $alertsPayload = json_encode($rapportageMapAlerts ?? [], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT);
 if (!is_string($alertsPayload)) {
     $alertsPayload = '[]';
+}
+
+$userRole = strtoupper((string) ($authUser['role'] ?? 'ORG_REPORTER'));
+$isLeadOrAdmin = in_array($userRole, ['ADMIN', 'CLUSTER_LEADER', 'GTMP_LEAD', 'GTMP_COLEAD', 'CLUSTER_PROTECTION', 'LEAD_GTMP'], true);
+$userOrgId = (int) ($authUser['organization_id'] ?? 0);
+$userOrgName = htmlspecialchars((string) ($authUser['organization_name'] ?? 'Mon organisation'), ENT_QUOTES, 'UTF-8');
+$stats = is_array($rapportageStats ?? null) ? $rapportageStats : ['total' => 0, 'critiques' => 0, 'attente' => 0, 'valides' => 0];
+$brandLogoPath = 'assets/img/sydra-logo/BLEU-PRIMARY-SYDRA-LOGO.png';
+$initialAlerts = is_array($rapportageMapAlerts ?? null) ? $rapportageMapAlerts : [];
+$initialAlertsCount = count($initialAlerts);
+$initialSeverity = ['Critique' => 0, 'Élevée' => 0, 'Moyenne' => 0, 'Faible' => 0];
+foreach ($initialAlerts as $alertItem) {
+    $level = strtolower(trim((string) ($alertItem['urgency_level'] ?? '')));
+    if (strpos($level, 'crit') !== false) {
+        $initialSeverity['Critique']++;
+    } elseif (strpos($level, 'ele') !== false || strpos($level, 'high') !== false) {
+        $initialSeverity['Élevée']++;
+    } elseif (strpos($level, 'moy') !== false || strpos($level, 'medium') !== false) {
+        $initialSeverity['Moyenne']++;
+    } else {
+        $initialSeverity['Faible']++;
+    }
+}
+$initialSeverityParts = [];
+foreach ($initialSeverity as $label => $value) {
+    if ($value > 0) {
+        $initialSeverityParts[] = $label . ': ' . $value;
+    }
+}
+$initialSeverityText = $initialSeverityParts !== [] ? implode(' | ', $initialSeverityParts) : 'Aucune donnée de gravité disponible.';
+$selectedDateDebut = trim((string) ($_GET['date_debut'] ?? ''));
+$selectedDateFin = trim((string) ($_GET['date_fin'] ?? ''));
+$selectedOrgId = trim((string) ($_GET['organisation_id'] ?? ''));
+
+if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $selectedDateDebut) !== 1) {
+    $selectedDateDebut = '';
+}
+if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $selectedDateFin) !== 1) {
+    $selectedDateFin = '';
+}
+if ($selectedOrgId !== '' && ctype_digit($selectedOrgId) === false) {
+    $selectedOrgId = '';
 }
 ?>
 
@@ -20,12 +68,12 @@ if (!is_string($alertsPayload)) {
                 <p class="mb-0 text-muted">Soumettez vos alertes rapides (Flash) ou vos notes de monitoring structurées.</p>
             </div>
             <div class="d-flex gap-2 flex-wrap">
-                <a href="?page=rapportage-mes-alertes" class="btn btn-light btn-sm shadow-sm">Mes alertes</a>
+                <a href="?page=rapportage-mes-alertes" class="btn btn-light btn-sm shadow-sm">Gérer toutes les alertes</a>
                 <a href="?page=rapportage-coordination" class="btn btn-light btn-sm shadow-sm">Coordination</a>
             </div>
         </div>
 
-        <div class="row g-3 mb-3">
+        <div class="row g-3 mb-4">
             <div class="col-lg-6">
                 <a href="?page=rapportage-creer-AI" class="hub-action-card hub-action-ai text-decoration-none">
                     <div class="hub-action-icon"><i class="fa-solid fa-robot"></i></div>
@@ -46,30 +94,72 @@ if (!is_string($alertsPayload)) {
             </div>
         </div>
 
+        <div class="card shadow-sm rounded-4 bg-white border-0 mb-4 px-3 py-3" id="hub-filter-bar">
+            <form id="filterForm" method="get" action="?page=rapportage" class="row g-2 align-items-end" autocomplete="off" novalidate>
+                <input type="hidden" name="page" value="rapportage">
+                <div class="col-12 col-sm-6 col-lg-3">
+                    <label for="filter-date-debut" class="form-label mb-1 small fw-semibold text-secondary">
+                        <i class="bi bi-calendar-event me-1"></i>Du
+                    </label>
+                    <input type="date" id="filter-date-debut" name="date_debut" class="form-control form-control-sm" value="<?= htmlspecialchars($selectedDateDebut, ENT_QUOTES, 'UTF-8'); ?>">
+                </div>
+                <div class="col-12 col-sm-6 col-lg-3">
+                    <label for="filter-date-fin" class="form-label mb-1 small fw-semibold text-secondary">
+                        <i class="bi bi-calendar-check me-1"></i>Au
+                    </label>
+                    <input type="date" id="filter-date-fin" name="date_fin" class="form-control form-control-sm" value="<?= htmlspecialchars($selectedDateFin, ENT_QUOTES, 'UTF-8'); ?>">
+                </div>
+
+                <?php if ($isLeadOrAdmin): ?>
+                <div class="col-12 col-sm-8 col-lg-4">
+                    <label for="filter-org" class="form-label mb-1 small fw-semibold text-secondary">
+                        <i class="bi bi-building me-1"></i>Organisation
+                    </label>
+                    <select id="filter-org" name="organisation_id" class="form-select form-select-sm">
+                        <option value="">Toutes les organisations</option>
+                        <?php foreach ($rapportageOrganizations as $org): ?>
+                            <?php $orgId = (string) ((int) ($org['id'] ?? 0)); ?>
+                            <option value="<?= (int) ($org['id'] ?? 0); ?>" <?= ($selectedOrgId !== '' && $selectedOrgId === $orgId) ? 'selected' : ''; ?>><?= htmlspecialchars((string) ($org['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <?php else: ?>
+                <div class="col-12 col-sm-8 col-lg-4">
+                    <label class="form-label mb-1 small fw-semibold text-secondary">
+                        <i class="bi bi-building me-1"></i>Organisation
+                    </label>
+                    <input type="text" class="form-control form-control-sm bg-light" value="<?= $userOrgName; ?>" readonly>
+                    <input type="hidden" name="organisation_id" value="<?= $userOrgId; ?>">
+                </div>
+                <?php endif; ?>
+
+                <div class="col-12 col-sm-4 col-lg-2 d-flex align-items-end">
+                    <button type="submit" id="btn-filtrer" class="btn btn-sm w-100 hub-btn-filter">
+                        <i class="bi bi-search me-1"></i>Filtrer
+                    </button>
+                    <button type="button" id="btn-reset-filter" class="btn btn-sm btn-outline-secondary ms-2" title="Réinitialiser">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+            </form>
+
+            <div id="filter-status" class="d-none mt-2">
+                <span class="badge text-bg-info fs-7" id="filter-status-text"></span>
+            </div>
+        </div>
+
         <div class="row g-2 stats-grid">
             <div class="col-6 col-lg-3">
-                <div class="kpi-card kpi-blue shadow-sm rounded-4">
-                    <small>Total Alertes (Mois)</small>
-                    <strong>128</strong>
-                </div>
+                <div class="kpi-card kpi-blue shadow-sm rounded-4"><small>Total Alertes</small><strong id="stat-total"><?= (int) $stats['total']; ?></strong></div>
             </div>
             <div class="col-6 col-lg-3">
-                <div class="kpi-card kpi-red shadow-sm rounded-4">
-                    <small>Alertes Critiques</small>
-                    <strong>17</strong>
-                </div>
+                <div class="kpi-card kpi-red shadow-sm rounded-4"><small>Alertes Critiques</small><strong id="stat-critiques"><?= (int) $stats['critiques']; ?></strong></div>
             </div>
             <div class="col-6 col-lg-3">
-                <div class="kpi-card kpi-orange shadow-sm rounded-4">
-                    <small>En attente de validation</small>
-                    <strong>24</strong>
-                </div>
+                <div class="kpi-card kpi-orange shadow-sm rounded-4"><small>En attente de validation</small><strong id="stat-attente"><?= (int) $stats['attente']; ?></strong></div>
             </div>
             <div class="col-6 col-lg-3">
-                <div class="kpi-card kpi-green shadow-sm rounded-4">
-                    <small>Rapports Validés</small>
-                    <strong>87</strong>
-                </div>
+                <div class="kpi-card kpi-green shadow-sm rounded-4"><small>Rapports Validés</small><strong id="stat-valides"><?= (int) $stats['valides']; ?></strong></div>
             </div>
         </div>
     </div>
@@ -79,20 +169,48 @@ if (!is_string($alertsPayload)) {
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
         <div>
             <h2 class="mb-1">Cartographie des incidents récents</h2>
-            <p class="text-muted mb-0">Zone verrouillée sur Sud-Kivu et Maniema pour un suivi opérationnel ciblé.</p>
         </div>
-        <span class="badge text-bg-light border">Vue terrain sécurisée</span>
+        <div class="d-flex gap-2 align-items-center">
+            <button type="button" id="btn-export-map" class="btn btn-sm btn-outline-primary">
+                <i class="fa-solid fa-file-pdf me-1"></i>Exporter la carte
+            </button>
+            <span class="badge text-bg-light border" id="map-counter"><?= count($rapportageMapAlerts ?? []); ?> point(s)</span>
+            <span class="badge text-bg-light border">Vue terrain sécurisée</span>
+        </div>
     </div>
 
     <div id="rapportage-hub-map" class="hub-map rounded-4" data-alerts='<?= htmlspecialchars($alertsPayload, ENT_QUOTES, 'UTF-8'); ?>'></div>
 </div>
 
+<div class="row g-3 mt-1">
+    <div class="col-xl-7">
+        <div class="card shadow-sm rounded-4 border-0 chart-card h-100">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                <h3 class="h6 mb-0">Évolution des incidents (période filtrée)</h3>
+                <span class="badge text-bg-light border">Tendance</span>
+            </div>
+            <canvas id="incidentsTrendChart" class="hub-chart-canvas" aria-label="Évolution incidents"></canvas>
+            <div id="trend-alt" class="chart-alt compact"></div>
+            <div id="trend-static" class="small text-secondary mt-2">Global: <?= (int) $initialAlertsCount; ?> incident(s) chargé(s).</div>
+            <div id="trend-summary" class="small text-secondary mt-2"></div>
+        </div>
+    </div>
+    <div class="col-xl-5">
+        <div class="card shadow-sm rounded-4 border-0 chart-card h-100">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                <h3 class="h6 mb-0">Répartition par gravité</h3>
+                <span class="badge text-bg-light border">Critique à faible</span>
+            </div>
+            <canvas id="severityPieChart" class="hub-chart-canvas" aria-label="Répartition gravité"></canvas>
+            <div id="severity-alt" class="chart-alt compact"></div>
+            <div id="severity-static" class="small text-secondary mt-2"><?= htmlspecialchars($initialSeverityText, ENT_QUOTES, 'UTF-8'); ?></div>
+            <div id="severity-summary" class="small text-secondary mt-2"></div>
+        </div>
+    </div>
+</div>
+
 <style>
-.report-hub-hero {
-    position: relative;
-    overflow: hidden;
-    border: 1px solid #dbeafe;
-}
+.report-hub-hero { position: relative; overflow: hidden; border: 1px solid #dbeafe; }
 .report-hub-bg {
     position: absolute;
     inset: 0;
@@ -101,245 +219,1070 @@ if (!is_string($alertsPayload)) {
         radial-gradient(circle at 85% 10%, rgba(14, 165, 233, 0.14), transparent 38%),
         linear-gradient(140deg, #f8fbff 0%, #eef6ff 100%);
 }
-.report-hub-content {
-    position: relative;
-    z-index: 1;
-}
+.report-hub-content { position: relative; z-index: 1; }
+
 .hub-action-card {
-    display: flex;
-    gap: 12px;
-    align-items: center;
-    border: 1px solid #dbeafe;
-    border-radius: 16px;
-    padding: 16px;
-    min-height: 124px;
-    transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    display: flex; gap: 12px; align-items: center; border: 1px solid #dbeafe; border-radius: 16px;
+    padding: 16px; min-height: 124px; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
 }
-.hub-action-card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 18px 30px rgba(2, 6, 23, 0.09);
-    border-color: #9cc5ff;
-}
-.hub-action-card h2 {
-    font-size: 17px;
-    margin: 0 0 5px;
-    color: #0f172a;
-}
-.hub-action-card p {
-    color: #334155;
-}
+.hub-action-card:hover { transform: translateY(-3px); box-shadow: 0 18px 30px rgba(2, 6, 23, 0.09); border-color: #9cc5ff; }
+.hub-action-card h2 { font-size: 17px; margin: 0 0 5px; color: #0f172a; }
+.hub-action-card p { color: #334155; }
 .hub-action-icon {
-    width: 52px;
-    height: 52px;
-    border-radius: 12px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 24px;
-    color: #ffffff;
-    flex: 0 0 auto;
+    width: 52px; height: 52px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center;
+    font-size: 24px; color: #fff; flex: 0 0 auto;
 }
-.hub-action-ai {
-    background: linear-gradient(140deg, #005bbb 0%, #3a86ff 65%, #7b61ff 100%);
-}
-.hub-action-ai h2,
-.hub-action-ai p {
-    color: #ffffff;
-}
-.hub-action-ai .hub-action-icon {
-    background: rgba(255, 255, 255, 0.24);
-}
-.hub-action-manual {
-    background: #ffffff;
-}
-.hub-action-manual .hub-action-icon {
-    background: #005bbb;
-}
-.kpi-card {
-    padding: 12px;
-    display: grid;
-    gap: 3px;
-    border: 1px solid rgba(255, 255, 255, 0.25);
-}
-.kpi-card small {
-    color: rgba(255, 255, 255, 0.88);
-    font-weight: 600;
-}
-.kpi-card strong {
-    color: #ffffff;
-    font-size: 22px;
-    line-height: 1;
-}
+.hub-action-ai { background: linear-gradient(140deg, #005bbb 0%, #3a86ff 65%, #7b61ff 100%); }
+.hub-action-ai h2, .hub-action-ai p { color: #fff; }
+.hub-action-ai .hub-action-icon { background: rgba(255,255,255,0.24); }
+.hub-action-manual { background: #fff; }
+.hub-action-manual .hub-action-icon { background: #005bbb; }
+
+#hub-filter-bar { border: 1px solid #e2e8f0; }
+.hub-btn-filter { background: #005BBB; color: #fff; border: none; font-weight: 600; }
+.hub-btn-filter:hover { background: #0047a0; color: #fff; }
+
+.kpi-card { padding: 12px; display: grid; gap: 3px; border: 1px solid rgba(255,255,255,0.25); transition: transform .15s ease; }
+.kpi-card:hover { transform: translateY(-2px); }
+.kpi-card small { color: rgba(255,255,255,0.88); font-weight: 600; }
+.kpi-card strong { color: #fff; font-size: 22px; line-height: 1; }
 .kpi-blue { background: #005BBB; }
 .kpi-red { background: #E53E3E; }
 .kpi-orange { background: #f97316; }
 .kpi-green { background: #059669; }
-.hub-map {
-    width: 100%;
-    height: 500px;
-    border: 1px solid #dbeafe;
+.kpi-loading strong { opacity: 0.4; }
+
+.hub-map { width: 100%; height: 500px; border: 1px solid #dbeafe; overflow: hidden; }
+.leaflet-popup-content-wrapper { border-radius: 12px; }
+.leaflet-popup-content { margin: 10px 12px; }
+.map-alert-title { font-weight: 700; color: #0f172a; margin-bottom: 4px; }
+.map-alert-meta { color: #475569; font-size: 12px; }
+.hub-marker {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 2px solid #ffffff;
+    box-shadow: 0 3px 10px rgba(15, 23, 42, 0.35);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+    font-size: 11px;
+}
+.hub-popup-card {
+    min-width: 230px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
     overflow: hidden;
 }
-.leaflet-popup-content-wrapper {
-    border-radius: 12px;
-}
-.leaflet-popup-content {
-    margin: 10px 12px;
-}
-.map-alert-title {
+.hub-popup-head {
+    background: #f8fafc;
+    padding: 8px 10px;
+    font-size: 12px;
     font-weight: 700;
     color: #0f172a;
+    border-bottom: 1px solid #e2e8f0;
+}
+.hub-popup-body {
+    padding: 8px 10px;
+    font-size: 12px;
+    color: #334155;
+}
+.hub-popup-body span {
+    display: block;
     margin-bottom: 4px;
 }
-.map-alert-meta {
-    color: #475569;
-    font-size: 12px;
+
+.hub-map-legend {
+    background: #fff; padding: 8px 12px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    font-size: 12px; line-height: 1.7; min-width: 160px;
+}
+.hub-map-legend strong { display: block; font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+.hub-map-legend-item { display: flex; align-items: center; gap: 7px; color: #1e293b; }
+.hub-map-legend-dot { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 auto; border: 2px solid rgba(0,0,0,0.18); }
+
+.chart-card { border: 1px solid #dbeafe; padding: 14px; background: linear-gradient(170deg, #ffffff 0%, #f8fbff 100%); }
+.hub-chart-canvas { display: none; }
+#severityPieChart {
+    display: block;
+    width: 100%;
+    height: 180px !important;
+    max-height: 180px;
+}
+#severity-alt {
+    display: none;
+}
+.chart-alt {
+    border: 1px dashed #bfdbfe;
+    border-radius: 12px;
+    padding: 8px;
+    min-height: 72px;
+    max-height: 120px;
+    overflow-y: auto;
+    background: #ffffff;
+}
+.chart-alt.compact {
+    min-height: 64px;
+    max-height: 100px;
+}
+.chart-alt-empty {
+    color: #64748b;
+    font-size: 13px;
+}
+.chart-row {
+    display: grid;
+    grid-template-columns: 90px 1fr 32px;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+.chart-row-label {
+    color: #334155;
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.chart-row-bar {
+    height: 8px;
+    border-radius: 999px;
+    background: #e2e8f0;
+    overflow: hidden;
+}
+.chart-row-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #005bbb 0%, #38bdf8 100%);
+}
+.chart-row-value {
+    color: #0f172a;
+    font-size: 11px;
+    font-weight: 700;
+    text-align: right;
+}
+.cloud-dots {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    max-height: 70px;
+    overflow-y: auto;
+}
+.cloud-dot {
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    flex: 0 0 auto;
+}
+
+.severity-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.severity-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #0f172a;
+    background: #eef2ff;
+}
+
+.severity-chip-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+}
+
+@media (max-width: 768px) {
+    .chart-alt {
+        max-height: 100px;
+    }
+    .chart-alt.compact {
+        max-height: 92px;
+    }
+    .chart-row {
+        grid-template-columns: 72px 1fr 28px;
+        gap: 5px;
+    }
+    .chart-row-label,
+    .chart-row-value {
+        font-size: 11px;
+    }
+    .cloud-dots {
+        max-height: 62px;
+        gap: 4px;
+    }
 }
 </style>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <script>
 (function () {
-    function initMapWhenReady() {
+    'use strict';
+
+    var BRAND_LOGO_PATH = <?= json_encode($brandLogoPath, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>;
+
+    function appBasePath() {
+        var pathname = String(window.location.pathname || '/');
+        if (pathname.slice(-1) === '/') {
+            return pathname;
+        }
+        return pathname.slice(0, pathname.lastIndexOf('/') + 1);
+    }
+
+    var API_ENDPOINT = appBasePath() + 'api/get_dashboard_filtered.php';
+
+    function normalize(value) {
+        return String(value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+    }
+
+    function urgencyColor(level) {
+        var n = normalize(level);
+        if (n.indexOf('crit') >= 0) return '#E53E3E';
+        if (n.indexOf('ele') >= 0) return '#f97316';
+        if (n.indexOf('moy') >= 0) return '#f59e0b';
+        return '#005BBB';
+    }
+
+    function resolveLocationFromText(raw) {
+        var cityCoords = {
+            bukavu: [-2.5099, 28.8428], uvira: [-3.4067, 29.1458], goma: [-1.6792, 29.2228],
+            minova: [-2.1547, 28.9891], kalehe: [-2.2581, 28.6765], idjwi: [-2.1198, 28.9961],
+            walungu: [-2.7082, 28.6133], kabare: [-2.4741, 28.7619], shabunda: [-2.6978, 27.3358],
+            fizi: [-4.3014, 28.9448], baraka: [-4.0976, 29.0958], kindu: [-2.9508, 25.9464],
+            butembo: [-0.1408, 29.2903], kalima: [-2.6147, 26.5622]
+        };
+        var loc = normalize(raw);
+        if (!loc) return null;
+        for (var city in cityCoords) {
+            if (Object.prototype.hasOwnProperty.call(cityCoords, city) && loc.indexOf(city) >= 0) {
+                return cityCoords[city];
+            }
+        }
+        return null;
+    }
+
+    var hubMap = null;
+    var markersLayer = null;
+    var trendChart = null;
+    var severityChart = null;
+    var cloudChart = null;
+    var currentAlerts = [];
+    var staticChartPayload = null;
+    var staticCloudMarkers = [];
+
+    function escapeHtml(value) {
+        return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function buildStaticChartsFromMarkers(markers) {
+        var list = Array.isArray(markers) ? markers : [];
+        var severityMap = { 'Critique': 0, 'Élevée': 0, 'Moyenne': 0, 'Faible': 0 };
+
+        list.forEach(function (m) {
+            var sev = severityScore(m.urgency_level || 'Faible').label;
+            if (!Object.prototype.hasOwnProperty.call(severityMap, sev)) {
+                severityMap[sev] = 0;
+            }
+            severityMap[sev] += 1;
+        });
+
+        var labels = [];
+        var values = [];
+        ['Critique', 'Élevée', 'Moyenne', 'Faible'].forEach(function (label) {
+            if (severityMap[label] > 0) {
+                labels.push(label);
+                values.push(severityMap[label]);
+            }
+        });
+
+        return {
+            trend: {
+                labels: ['Global'],
+                values: [list.length]
+            },
+            severity: {
+                labels: labels,
+                values: values
+            }
+        };
+    }
+
+    function buildMarkers(alerts) {
+        if (!markersLayer) return;
+        markersLayer.clearLayers();
+        var added = [];
+        currentAlerts = Array.isArray(alerts) ? alerts.slice() : [];
+
+        alerts.forEach(function (item) {
+            var lat = Number(item.gps_lat || 0);
+            var lng = Number(item.gps_lng || 0);
+            var coords = null;
+
+            if (!Number.isNaN(lat) && !Number.isNaN(lng) && lat !== 0 && lng !== 0) {
+                coords = [lat, lng];
+            } else {
+                coords = resolveLocationFromText(item.location_text || item.locality || item.province || '');
+            }
+            if (!coords) return;
+
+            var color = urgencyColor(item.urgency_level || 'Moyenne');
+            var reportId = Number(item.id || 0);
+            var typeLabel = String(item.report_type || 'FLASH');
+            var orgName = String(item.organization_name || 'Organisation inconnue');
+            var dateRaw = String(item.created_at || '');
+            var dateLabel = dateRaw ? dateRaw.replace('T', ' ') : 'Date non précisée';
+
+            var icon = window.L.divIcon({
+                className: 'hub-div-icon',
+                html: '<span class="hub-marker" style="background:' + color + ';"><i class="fa-solid fa-triangle-exclamation"></i></span>',
+                iconSize: [26, 26],
+                iconAnchor: [13, 13],
+                popupAnchor: [0, -8]
+            });
+
+            var marker = window.L.marker(coords, { icon: icon });
+
+            marker.bindPopup(
+                '<div class="hub-popup-card">'
+                + '<div class="hub-popup-head">' + typeLabel + '</div>'
+                + '<div class="hub-popup-body">'
+                + '<span><strong>Date:</strong> ' + dateLabel + '</span>'
+                + '<span><strong>Organisation:</strong> ' + orgName + '</span>'
+                + '<span><strong>Localisation:</strong> ' + String(item.location_text || item.locality || item.province || 'Non précisée') + '</span>'
+                + '<a class="btn btn-sm btn-primary mt-1" href="?page=rapportage-voir&id=' + reportId + '">Voir l\'alerte</a>'
+                + '</div>'
+                + '</div>'
+            );
+
+            markersLayer.addLayer(marker);
+            added.push(coords);
+        });
+
+        var counter = document.getElementById('map-counter');
+        if (counter) counter.textContent = added.length + ' point' + (added.length > 1 ? 's' : '');
+
+        if (added.length > 0 && hubMap) {
+            var bounds = window.L.latLngBounds(added);
+            hubMap.fitBounds(bounds.pad(0.18));
+        }
+    }
+
+    function addLegend(map) {
+        var Legend = window.L.Control.extend({
+            options: { position: 'bottomright' },
+            onAdd: function () {
+                var div = window.L.DomUtil.create('div', 'hub-map-legend');
+                div.innerHTML =
+                    '<strong>Niveau de gravité</strong>'
+                    + '<div class="hub-map-legend-item"><span class="hub-map-legend-dot" style="background:#E53E3E"></span>Critique</div>'
+                    + '<div class="hub-map-legend-item"><span class="hub-map-legend-dot" style="background:#f97316"></span>Élevée</div>'
+                    + '<div class="hub-map-legend-item"><span class="hub-map-legend-dot" style="background:#f59e0b"></span>Moyenne</div>'
+                    + '<div class="hub-map-legend-item"><span class="hub-map-legend-dot" style="background:#005BBB"></span>Faible</div>';
+                return div;
+            }
+        });
+        new Legend().addTo(map);
+    }
+
+    function initMap() {
         if (!window.L) {
-            window.setTimeout(initMapWhenReady, 90);
+            setTimeout(initMap, 90);
             return;
         }
 
-        var mapElement = document.getElementById('rapportage-hub-map');
-        if (!mapElement || mapElement.dataset.ready === '1') {
-            return;
-        }
-        mapElement.dataset.ready = '1';
+        var mapEl = document.getElementById('rapportage-hub-map');
+        if (!mapEl || mapEl.dataset.ready === '1') return;
+        mapEl.dataset.ready = '1';
 
-        var southWest = window.L.latLng(-5.0, 25.0);
-        var northEast = window.L.latLng(0.0, 29.5);
-        var bounds = window.L.latLngBounds(southWest, northEast);
+        var bounds = window.L.latLngBounds(window.L.latLng(-5.0, 25.0), window.L.latLng(0.0, 29.5));
 
-        var map = window.L.map(mapElement, {
+        hubMap = window.L.map(mapEl, {
             minZoom: 6,
             maxZoom: 12,
             maxBounds: bounds,
             maxBoundsViscosity: 1.0,
             zoomControl: true
         });
-
-        map.setView([-3.0, 27.5], 7);
+        hubMap.setView([-3.0, 27.5], 7);
 
         window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; OpenStreetMap contributors'
-        }).addTo(map);
+        }).addTo(hubMap);
 
-        function normalize(value) {
-            return String(value || '')
-                .toLowerCase()
-                .normalize('NFD')
-                .replace(/[\u0300-\u036f]/g, '')
-                .trim();
-        }
+        markersLayer = window.L.layerGroup().addTo(hubMap);
+        addLegend(hubMap);
 
-        function resolveLocationFromText(rawLocation) {
-            var cityCoords = {
-                bukavu: [-2.5099, 28.8428],
-                uvira: [-3.4067, 29.1458],
-                goma: [-1.6792, 29.2228],
-                minova: [-2.1547, 28.9891],
-                kalehe: [-2.2581, 28.6765],
-                idjwi: [-2.1198, 28.9961],
-                walungu: [-2.7082, 28.6133],
-                kabare: [-2.4741, 28.7619],
-                shabunda: [-2.6978, 27.3358],
-                fizi: [-4.3014, 28.9448],
-                baraka: [-4.0976, 29.0958],
-                kindu: [-2.9508, 25.9464],
-                kalima: [-2.6147, 26.5622]
-            };
-
-            var location = normalize(rawLocation);
-            if (location === '') {
-                return null;
-            }
-
-            for (var city in cityCoords) {
-                if (Object.prototype.hasOwnProperty.call(cityCoords, city) && location.indexOf(city) >= 0) {
-                    return cityCoords[city];
-                }
-            }
-
-            return null;
-        }
-
-        function urgencyColor(level) {
-            var n = normalize(level);
-            if (n.indexOf('crit') >= 0) {
-                return '#E53E3E';
-            }
-            if (n.indexOf('ele') >= 0) {
-                return '#f97316';
-            }
-            if (n.indexOf('moy') >= 0) {
-                return '#f59e0b';
-            }
-            return '#005BBB';
-        }
-
-        var raw = mapElement.getAttribute('data-alerts') || '[]';
-        var alerts = [];
+        var raw = mapEl.getAttribute('data-alerts') || '[]';
+        var initialAlerts = [];
         try {
-            alerts = JSON.parse(raw);
+            initialAlerts = JSON.parse(raw);
         } catch (e) {
-            alerts = [];
+            initialAlerts = [];
+        }
+        staticCloudMarkers = Array.isArray(initialAlerts) ? initialAlerts.slice() : [];
+        if (staticChartPayload === null) {
+            staticChartPayload = buildStaticChartsFromMarkers(staticCloudMarkers);
+        }
+        buildMarkers(initialAlerts);
+    }
+
+    function initCharts() {
+        if (!window.Chart) {
+            renderChartsFallback(staticChartPayload || { trend: { labels: [], values: [] }, severity: { labels: [], values: [] } });
+            return;
         }
 
-        var markers = [];
-        alerts.forEach(function (item) {
-            var lat = Number(item.gps_lat || 0);
-            var lng = Number(item.gps_lng || 0);
-            var coords = null;
-            if (!Number.isNaN(lat) && !Number.isNaN(lng) && lat !== 0 && lng !== 0) {
-                coords = [lat, lng];
-            } else {
-                coords = resolveLocationFromText(item.location_text || item.province || '');
-            }
+        var trendCtx = document.getElementById('incidentsTrendChart');
+        var severityCtx = document.getElementById('severityPieChart');
+        var cloudCtx = document.getElementById('incidentsCloudChart');
 
-            if (!coords) {
-                return;
-            }
+        if (trendCtx && !trendChart) {
+            trendChart = new window.Chart(trendCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Incidents',
+                        data: [],
+                        borderColor: '#005BBB',
+                        backgroundColor: 'rgba(0, 91, 187, 0.18)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.35,
+                        pointRadius: 3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+                }
+            });
+        }
 
-            var color = urgencyColor(item.urgency_level || 'Moyenne');
-            var reportId = Number(item.id || 0);
-            var detailHref = '?page=rapportage-voir&id=' + reportId;
-            var title = String(item.report_type || 'FLASH') + ' - ' + String(item.organization_name || 'Organisation');
-            var meta = String(item.location_text || item.province || 'Localisation non précisée')
-                + ' • '
-                + String(item.workflow_status || 'Soumis');
+        if (severityCtx && !severityChart) {
+            severityChart = new window.Chart(severityCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        data: [],
+                        backgroundColor: ['#E53E3E', '#f97316', '#f59e0b', '#005BBB'],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom' }
+                    }
+                }
+            });
+        }
 
-            var marker = window.L.circleMarker(coords, {
-                radius: 10,
-                color: color,
-                weight: 2,
-                fillColor: color,
-                fillOpacity: 0.8
-            }).addTo(map);
+        if (cloudCtx && !cloudChart) {
+            cloudChart = new window.Chart(cloudCtx, {
+                type: 'bubble',
+                data: {
+                    datasets: [{
+                        label: 'Incidents filtrés',
+                        data: [],
+                        backgroundColor: 'rgba(0, 91, 187, 0.38)',
+                        borderColor: '#005BBB',
+                        borderWidth: 1.2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function (ctx) {
+                                    var raw = ctx.raw || {};
+                                    var org = raw.org || 'Organisation';
+                                    var sev = raw.severity_label || 'Faible';
+                                    return org + ' - ' + sev;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            title: { display: true, text: 'Index incident filtré' },
+                            ticks: { precision: 0 }
+                        },
+                        y: {
+                            min: 0.5,
+                            max: 4.5,
+                            ticks: {
+                                stepSize: 1,
+                                callback: function (value) {
+                                    if (value === 4) return 'Critique';
+                                    if (value === 3) return 'Élevée';
+                                    if (value === 2) return 'Moyenne';
+                                    if (value === 1) return 'Faible';
+                                    return '';
+                                }
+                            },
+                            title: { display: true, text: 'Niveau de gravité' }
+                        }
+                    }
+                }
+            });
+        }
+    }
 
-            marker.bindPopup(
-                '<div class="map-alert-title">' + title + '</div>'
-                + '<div class="map-alert-meta">' + meta + '</div>'
-                + '<div class="mt-2"><a class="btn btn-sm btn-primary" href="' + detailHref + '">Voir l\'alerte</a></div>'
-            );
+    function severityScore(level) {
+        var n = normalize(level);
+        if (n.indexOf('crit') >= 0) return { score: 4, label: 'Critique', radius: 9 };
+        if (n.indexOf('ele') >= 0 || n.indexOf('high') >= 0) return { score: 3, label: 'Élevée', radius: 8 };
+        if (n.indexOf('moy') >= 0 || n.indexOf('medium') >= 0) return { score: 2, label: 'Moyenne', radius: 7 };
+        return { score: 1, label: 'Faible', radius: 6 };
+    }
 
-            markers.push(marker);
+    function updateCloudChart(markers) {
+        if (!window.Chart || !cloudChart) {
+            renderCloudAlt(markers);
+            return;
+        }
+
+        var cloudStatic = document.getElementById('cloud-static');
+        if (cloudStatic) {
+            cloudStatic.style.display = 'none';
+        }
+
+        var list = Array.isArray(markers) ? markers : [];
+        var points = list.slice(0, 180).map(function (m, idx) {
+            var sev = severityScore(m.urgency_level || 'Faible');
+            return {
+                x: idx + 1,
+                y: sev.score,
+                r: sev.radius,
+                org: String(m.organization_name || 'Organisation'),
+                severity_label: sev.label
+            };
         });
 
-        if (markers.length > 0) {
-            var group = window.L.featureGroup(markers);
-            map.fitBounds(group.getBounds().pad(0.18));
+        cloudChart.data.datasets[0].data = points;
+        cloudChart.data.datasets[0].backgroundColor = points.map(function (pt) {
+            if (pt.y === 4) return 'rgba(229, 62, 62, 0.45)';
+            if (pt.y === 3) return 'rgba(249, 115, 22, 0.45)';
+            if (pt.y === 2) return 'rgba(245, 158, 11, 0.45)';
+            return 'rgba(0, 91, 187, 0.35)';
+        });
+        cloudChart.update();
+        renderCloudAlt(markers);
+    }
+
+    function updateCharts(chartsPayload) {
+        if (!window.Chart) {
+            renderChartsFallback(chartsPayload || {});
+            renderTrendAlt(chartsPayload && chartsPayload.trend ? chartsPayload.trend : { labels: [], values: [] });
+            renderSeverityAlt(chartsPayload && chartsPayload.severity ? chartsPayload.severity : { labels: [], values: [] });
+            return;
+        }
+
+        var trendStatic = document.getElementById('trend-static');
+        var severityStatic = document.getElementById('severity-static');
+        if (trendStatic) {
+            trendStatic.style.display = 'none';
+        }
+        if (severityStatic) {
+            severityStatic.style.display = 'none';
+        }
+
+        var trendCanvas = document.getElementById('incidentsTrendChart');
+        var severityCanvas = document.getElementById('severityPieChart');
+        if (trendCanvas) trendCanvas.style.display = 'none';
+        if (severityCanvas) severityCanvas.style.display = 'block';
+        var trendFallback = document.getElementById('trend-fallback');
+        var severityFallback = document.getElementById('severity-fallback');
+        if (trendFallback) trendFallback.style.display = 'none';
+        if (severityFallback) severityFallback.style.display = 'none';
+
+        var trend = chartsPayload && chartsPayload.trend ? chartsPayload.trend : { labels: [], values: [] };
+        var severity = chartsPayload && chartsPayload.severity ? chartsPayload.severity : { labels: [], values: [] };
+
+        if (trendChart) {
+            trendChart.data.labels = Array.isArray(trend.labels) ? trend.labels : [];
+            trendChart.data.datasets[0].data = Array.isArray(trend.values) ? trend.values : [];
+            trendChart.update();
+        }
+
+        if (severityChart) {
+            severityChart.data.labels = Array.isArray(severity.labels) ? severity.labels : [];
+            severityChart.data.datasets[0].data = Array.isArray(severity.values) ? severity.values : [];
+            severityChart.update();
+        }
+
+        renderTrendAlt(trend);
+        renderSeverityAlt(severity);
+    }
+
+    function renderTrendAlt(trend) {
+        var host = document.getElementById('trend-alt');
+        if (!host) return;
+
+        var labels = Array.isArray(trend && trend.labels) ? trend.labels : [];
+        var values = Array.isArray(trend && trend.values) ? trend.values : [];
+        if (labels.length === 0 || values.length === 0) {
+            host.innerHTML = '<div class="chart-alt-empty">Aucune donnée de tendance.</div>';
+            return;
+        }
+
+        var max = 1;
+        for (var i = 0; i < values.length; i += 1) {
+            if (Number(values[i]) > max) max = Number(values[i]);
+        }
+
+        var rows = [];
+        var maxRows = 3;
+        var limit = Math.min(labels.length, maxRows);
+        for (var j = 0; j < limit; j += 1) {
+            var val = Number(values[j] || 0);
+            var pct = Math.max(4, Math.round((val / max) * 100));
+            rows.push(
+                '<div class="chart-row">'
+                + '<div class="chart-row-label">' + escapeHtml(labels[j]) + '</div>'
+                + '<div class="chart-row-bar"><div class="chart-row-fill" style="width:' + pct + '%"></div></div>'
+                + '<div class="chart-row-value">' + val + '</div>'
+                + '</div>'
+            );
+        }
+        if (labels.length > limit) {
+            rows.push('<div class="chart-alt-empty">+' + (labels.length - limit) + ' periode(s) supplementaire(s)</div>');
+        }
+        host.innerHTML = rows.join('');
+    }
+
+    function renderSeverityAlt(severity) {
+        var host = document.getElementById('severity-alt');
+        if (!host) return;
+
+        var labels = Array.isArray(severity && severity.labels) ? severity.labels : [];
+        var values = Array.isArray(severity && severity.values) ? severity.values : [];
+        if (labels.length === 0 || values.length === 0) {
+            host.innerHTML = '<div class="chart-alt-empty">Aucune donnée de gravité.</div>';
+            return;
+        }
+
+        var colors = {
+            'Critique': '#E53E3E',
+            'Élevée': '#f97316',
+            'Moyenne': '#f59e0b',
+            'Faible': '#005BBB'
+        };
+
+        var max = 1;
+        for (var i = 0; i < values.length; i += 1) {
+            if (Number(values[i]) > max) max = Number(values[i]);
+        }
+
+        var rows = [];
+        var maxRows = 4;
+        var limit = Math.min(labels.length, maxRows);
+        rows.push('<div class="severity-chips">');
+        for (var j = 0; j < limit; j += 1) {
+            var label = String(labels[j]);
+            var val = Number(values[j] || 0);
+            var color = colors[label] || '#64748b';
+            rows.push(
+                '<span class="severity-chip">'
+                + '<span class="severity-chip-dot" style="background:' + color + '"></span>'
+                + escapeHtml(label) + ': ' + val
+                + '</span>'
+            );
+        }
+        rows.push('</div>');
+        if (labels.length > limit) {
+            rows.push('<div class="chart-alt-empty">+' + (labels.length - limit) + ' categorie(s) supplementaire(s)</div>');
+        }
+        host.innerHTML = rows.join('');
+    }
+
+    function renderCloudAlt(markers) {
+        var host = document.getElementById('cloud-alt');
+        if (!host) return;
+
+        var list = Array.isArray(markers) ? markers : [];
+        if (list.length === 0) {
+            host.innerHTML = '<div class="chart-alt-empty">Aucun point global disponible.</div>';
+            return;
+        }
+
+        var dots = [];
+        for (var i = 0; i < list.length && i < 8; i += 1) {
+            var sev = severityScore(list[i].urgency_level || 'Faible');
+            var size = sev.radius * 2;
+            var color = '#005BBB';
+            if (sev.score === 4) color = '#E53E3E';
+            else if (sev.score === 3) color = '#f97316';
+            else if (sev.score === 2) color = '#f59e0b';
+
+            dots.push(
+                '<span class="cloud-dot" style="width:' + size + 'px;height:' + size + 'px;background:' + color + '" title="'
+                + escapeHtml(String(list[i].organization_name || 'Organisation') + ' - ' + sev.label)
+                + '">' + sev.score + '</span>'
+            );
+        }
+
+        var more = '';
+        if (list.length > 8) {
+            more = '<div class="chart-alt-empty mt-2">+' + (list.length - 8) + ' point(s) non affiches</div>';
+        }
+
+        host.innerHTML = '<div class="cloud-dots">' + dots.join('') + '</div>' + more;
+    }
+
+    function renderChartsFallback(chartsPayload) {
+        var trend = chartsPayload && chartsPayload.trend ? chartsPayload.trend : { labels: [], values: [] };
+        var severity = chartsPayload && chartsPayload.severity ? chartsPayload.severity : { labels: [], values: [] };
+
+        var trendCanvas = document.getElementById('incidentsTrendChart');
+        var severityCanvas = document.getElementById('severityPieChart');
+        if (!trendCanvas || !severityCanvas) {
+            return;
+        }
+
+        var trendParent = trendCanvas.parentElement;
+        var severityParent = severityCanvas.parentElement;
+        if (!trendParent || !severityParent) {
+            return;
+        }
+
+        trendCanvas.style.display = 'none';
+        severityCanvas.style.display = 'none';
+
+        var trendFallback = document.getElementById('trend-fallback');
+        if (!trendFallback) {
+            trendFallback = document.createElement('div');
+            trendFallback.id = 'trend-fallback';
+            trendFallback.className = 'small text-muted';
+            trendParent.appendChild(trendFallback);
+        }
+
+        var trendRows = [];
+        for (var i = 0; i < (trend.labels || []).length; i += 1) {
+            trendRows.push('<li>' + String(trend.labels[i]) + ': <strong>' + String((trend.values || [])[i] || 0) + '</strong></li>');
+        }
+        trendFallback.innerHTML = trendRows.length > 0 ? '<ul class="mb-0 ps-3">' + trendRows.join('') + '</ul>' : '<p class="mb-0">Aucune donnée de tendance.</p>';
+
+        var severityFallback = document.getElementById('severity-fallback');
+        if (!severityFallback) {
+            severityFallback = document.createElement('div');
+            severityFallback.id = 'severity-fallback';
+            severityFallback.className = 'small text-muted';
+            severityParent.appendChild(severityFallback);
+        }
+
+        var sevRows = [];
+        for (var j = 0; j < (severity.labels || []).length; j += 1) {
+            sevRows.push('<li>' + String(severity.labels[j]) + ': <strong>' + String((severity.values || [])[j] || 0) + '</strong></li>');
+        }
+        severityFallback.innerHTML = sevRows.length > 0 ? '<ul class="mb-0 ps-3">' + sevRows.join('') + '</ul>' : '<p class="mb-0">Aucune donnée de gravité.</p>';
+    }
+
+    function exportMapReport() {
+        var popup = window.open('', '_blank');
+
+        var logoUrl = String(window.location.origin || '') + appBasePath() + BRAND_LOGO_PATH;
+        var alertsJson = JSON.stringify(currentAlerts || []);
+
+        var html = ''
+            + '<!doctype html><html lang="fr"><head><meta charset="utf-8">'
+            + '<title>Export carte incidents SyDRA</title>'
+            + '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">'
+            + '<style>body{font-family:Arial,sans-serif;padding:20px;color:#0f172a} .head{display:flex;align-items:center;gap:12px;margin-bottom:12px;border-bottom:1px solid #dbeafe;padding-bottom:8px} .logo{height:42px} #print-map{height:460px;border:1px solid #cbd5e1;border-radius:10px} table{width:100%;border-collapse:collapse;margin-top:14px} th,td{border:1px solid #e2e8f0;padding:6px;text-align:left;font-size:12px} th{background:#f8fafc}</style>'
+            + '</head><body>'
+            + '<div class="head"><img class="logo" src="' + logoUrl + '" alt="SyDRA"><div><strong>SyDRA - Export Carte des Incidents</strong><div style="font-size:12px;color:#475569">Document décisionnel</div></div></div>'
+            + '<div id="print-map"></div>'
+            + '<table><thead><tr><th>ID</th><th>Organisation</th><th>Localisation</th><th>Gravité</th><th>Statut</th><th>Date soumission</th></tr></thead><tbody id="rows"></tbody></table>'
+            + '<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></' + 'script>'
+            + '<script>(function(){var alerts=' + alertsJson + '; var map=L.map("print-map",{zoomControl:false}).setView([-3.0,27.5],7); L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"&copy; OpenStreetMap contributors"}).addTo(map); var city={bukavu:[-2.5099,28.8428],uvira:[-3.4067,29.1458],goma:[-1.6792,29.2228],minova:[-2.1547,28.9891],kalehe:[-2.2581,28.6765],idjwi:[-2.1198,28.9961],walungu:[-2.7082,28.6133],kabare:[-2.4741,28.7619],shabunda:[-2.6978,27.3358],fizi:[-4.3014,28.9448],baraka:[-4.0976,29.0958],kindu:[-2.9508,25.9464],butembo:[-0.1408,29.2903],kalima:[-2.6147,26.5622]}; var rows=[]; var pts=[]; alerts.forEach(function(a){var lat=Number(a.gps_lat||0),lng=Number(a.gps_lng||0),p=null; if(!Number.isNaN(lat)&&!Number.isNaN(lng)&&lat!==0&&lng!==0){p=[lat,lng];} else {var raw=String(a.location_text||a.locality||a.province||"").toLowerCase(); Object.keys(city).forEach(function(k){ if(!p && raw.indexOf(k)>=0){p=city[k];} });} if(p){L.circleMarker(p,{radius:7,color:"#005BBB",fillColor:"#005BBB",fillOpacity:0.8}).addTo(map); pts.push(p);} var d=String(a.created_at||"").replace("T"," "); rows.push("<tr><td>"+String(a.id||"")+"</td><td>"+String(a.organization_name||"")+"</td><td>"+String(a.location_text||a.province||"")+"</td><td>"+String(a.urgency_level||"")+"</td><td>"+String(a.workflow_status||"")+"</td><td>"+d+"</td></tr>");}); document.getElementById("rows").innerHTML=rows.join(""); if(pts.length>0){map.fitBounds(L.latLngBounds(pts).pad(0.25));} else {map.fitBounds(L.latLngBounds([[-5.0,25.0],[0.0,29.5]]));} setTimeout(function(){map.invalidateSize(); window.print();},1400);})();</' + 'script>'
+            + '</body></html>';
+
+        if (!popup) {
+            var blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+            var link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'sydra-carte-incidents.html';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            setTimeout(function () {
+                URL.revokeObjectURL(link.href);
+            }, 1000);
+            return;
+        }
+
+        popup.document.open();
+        popup.document.write(html);
+        popup.document.close();
+    }
+
+    function activeFilterLabel() {
+        var form = document.getElementById('filterForm');
+        if (!form) return '';
+
+        var parts = [];
+        var fromEl = form.querySelector('[name="date_debut"]');
+        var toEl = form.querySelector('[name="date_fin"]');
+        var orgEl = form.querySelector('[name="organisation_id"]');
+
+        var fromValue = fromEl ? String(fromEl.value || '').trim() : '';
+        var toValue = toEl ? String(toEl.value || '').trim() : '';
+        if (fromValue || toValue) {
+            parts.push('Période: ' + (fromValue || '...') + ' -> ' + (toValue || '...'));
+        }
+
+        if (orgEl) {
+            var orgValue = String(orgEl.value || '').trim();
+            if (orgValue !== '') {
+                if (orgEl.tagName === 'SELECT') {
+                    var orgText = orgEl.options[orgEl.selectedIndex] ? String(orgEl.options[orgEl.selectedIndex].text || '').trim() : orgValue;
+                    parts.push('Organisation: ' + orgText);
+                } else {
+                    parts.push('Organisation: ' + orgValue);
+                }
+            }
+        }
+
+        return parts.join(' | ');
+    }
+
+    function updateSummaries(chartsPayload, markers) {
+        var trendSummary = document.getElementById('trend-summary');
+        var severitySummary = document.getElementById('severity-summary');
+
+        var trend = chartsPayload && chartsPayload.trend ? chartsPayload.trend : { labels: [], values: [] };
+        var severity = chartsPayload && chartsPayload.severity ? chartsPayload.severity : { labels: [], values: [] };
+
+        if (trendSummary) {
+            if (Array.isArray(trend.labels) && trend.labels.length > 0) {
+                trendSummary.textContent = 'Périodes: ' + trend.labels.length + ' | Dernière période: ' + String(trend.labels[trend.labels.length - 1]) + ' (' + String((trend.values || [])[trend.values.length - 1] || 0) + ' incident(s))';
+            } else {
+                trendSummary.textContent = 'Aucune donnée de tendance pour le filtre courant.';
+            }
+        }
+
+        if (severitySummary) {
+            if (Array.isArray(severity.labels) && severity.labels.length > 0) {
+                var sevParts = severity.labels.map(function (label, idx) {
+                    return String(label) + ': ' + String((severity.values || [])[idx] || 0);
+                });
+                severitySummary.textContent = sevParts.join(' | ');
+            } else {
+                severitySummary.textContent = 'Aucune donnée de gravité pour le filtre courant.';
+            }
+        }
+
+    }
+
+    function applyFilter(params, isReset) {
+        var kpiCards = ['stat-total', 'stat-critiques', 'stat-attente', 'stat-valides'];
+        kpiCards.forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el && el.closest('.kpi-card')) {
+                el.closest('.kpi-card').classList.add('kpi-loading');
+            }
+        });
+
+        var statusBox = document.getElementById('filter-status');
+        var statusText = document.getElementById('filter-status-text');
+
+        fetch(API_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+            body: params
+        })
+        .then(function (resp) {
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            return resp.json();
+        })
+        .then(function (data) {
+            if (!data || data.ok === false) {
+                throw new Error((data && data.message) ? String(data.message) : 'Réponse API invalide');
+            }
+
+            var s = data.stats || {};
+            var statMap = {
+                'stat-total': s.total || 0,
+                'stat-critiques': s.critiques || 0,
+                'stat-attente': s.attente || 0,
+                'stat-valides': s.valides || 0
+            };
+
+            Object.keys(statMap).forEach(function (id) {
+                var el = document.getElementById(id);
+                if (el) {
+                    el.textContent = statMap[id];
+                    if (el.closest('.kpi-card')) el.closest('.kpi-card').classList.remove('kpi-loading');
+                }
+            });
+
+            var markers = Array.isArray(data.markers) ? data.markers : [];
+            if (hubMap && markersLayer) {
+                buildMarkers(markers);
+            }
+
+            if (staticChartPayload === null) {
+                staticChartPayload = data.charts || { trend: { labels: [], values: [] }, severity: { labels: [], values: [] } };
+            }
+            if (staticCloudMarkers.length === 0 && markers.length > 0) {
+                staticCloudMarkers = markers.slice();
+            }
+
+            var visualsCharts = staticChartPayload || { trend: { labels: [], values: [] }, severity: { labels: [], values: [] } };
+            var visualsMarkers = staticCloudMarkers.length > 0 ? staticCloudMarkers : markers;
+
+            updateCharts(visualsCharts);
+            updateSummaries(visualsCharts, visualsMarkers);
+
+            if (statusBox && statusText) {
+                if (isReset) {
+                    statusBox.classList.add('d-none');
+                } else {
+                    var markerCount = Array.isArray(data.markers) ? data.markers.length : 0;
+                    var details = activeFilterLabel();
+                    statusText.textContent = markerCount + ' alerte(s) filtrée(s)' + (details ? ' | ' + details : '');
+                    statusBox.classList.remove('d-none');
+                }
+            }
+        })
+        .catch(function (err) {
+            kpiCards.forEach(function (id) {
+                var el = document.getElementById(id);
+                if (el && el.closest('.kpi-card')) el.closest('.kpi-card').classList.remove('kpi-loading');
+            });
+
+            if (statusBox && statusText) {
+                statusText.textContent = 'Erreur de filtre AJAX. Rechargement de la page...';
+                statusBox.classList.remove('d-none');
+            }
+
+            var redirect = appBasePath() + '?page=rapportage';
+            var hasParams = String(params || '').trim() !== '';
+            if (hasParams) {
+                redirect = appBasePath() + '?' + String(params || '');
+            }
+            if (isReset) {
+                redirect = appBasePath() + '?page=rapportage';
+            }
+
+            window.setTimeout(function () {
+                window.location.assign(redirect);
+            }, 250);
+            console.error('[SyDRA] Filtre hub erreur:', err);
+        });
+    }
+
+    function bindFilterForm() {
+        var form = document.getElementById('filterForm');
+        var reset = document.getElementById('btn-reset-filter');
+        var exportBtn = document.getElementById('btn-export-map');
+        if (!form) return;
+
+        function syncUrl(paramsString) {
+            var url = new URL(window.location.href);
+            var params = new URLSearchParams(paramsString || '');
+
+            url.searchParams.set('page', 'rapportage');
+            ['date_debut', 'date_fin', 'organisation_id'].forEach(function (key) {
+                var value = (params.get(key) || '').trim();
+                if (value) {
+                    url.searchParams.set(key, value);
+                } else {
+                    url.searchParams.delete(key);
+                }
+            });
+
+            window.history.replaceState({}, '', url.toString());
+        }
+
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var params = new URLSearchParams(new FormData(form));
+            var paramsString = params.toString();
+            syncUrl(paramsString);
+            applyFilter(paramsString, false);
+        });
+
+        if (reset) {
+            reset.addEventListener('click', function () {
+                form.reset();
+
+                var fromEl = form.querySelector('[name="date_debut"]');
+                var toEl = form.querySelector('[name="date_fin"]');
+                var orgEl = form.querySelector('[name="organisation_id"]');
+                if (fromEl) fromEl.value = '';
+                if (toEl) toEl.value = '';
+                if (orgEl && orgEl.tagName === 'SELECT') orgEl.value = '';
+
+                syncUrl('');
+                applyFilter('', true);
+            });
+        }
+
+        if (exportBtn) {
+            exportBtn.addEventListener('click', function () {
+                exportMapReport();
+            });
+        }
+    }
+
+    function boot() {
+        initMap();
+        initCharts();
+        bindFilterForm();
+
+        var initialCharts = staticChartPayload || { trend: { labels: ['Global'], values: [0] }, severity: { labels: ['Faible'], values: [0] } };
+        var initialMarkers = staticCloudMarkers || [];
+        updateCharts(initialCharts);
+        updateSummaries(initialCharts, initialMarkers);
+
+        var form = document.getElementById('filterForm');
+        var initialParams = form ? new URLSearchParams(new FormData(form)).toString() : '';
+        var hasActiveFilters = false;
+        if (form) {
+            ['date_debut', 'date_fin', 'organisation_id'].forEach(function (name) {
+                var field = form.querySelector('[name="' + name + '"]');
+                if (field && String(field.value || '').trim() !== '') {
+                    hasActiveFilters = true;
+                }
+            });
+        }
+
+        if (initialParams) {
+            applyFilter(initialParams, !hasActiveFilters);
+        } else {
+            applyFilter('', true);
         }
     }
 
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initMapWhenReady);
+        document.addEventListener('DOMContentLoaded', boot);
     } else {
-        initMapWhenReady();
+        boot();
     }
 })();
 </script>
