@@ -3,6 +3,69 @@
 declare(strict_types=1);
 
 if (!function_exists('sendAppMail')) {
+    function ensureMailerAutoload(): array
+    {
+        $className = 'PHPMailer\\PHPMailer\\PHPMailer';
+        if (class_exists($className)) {
+            return ['loaded' => true, 'source' => 'already_loaded'];
+        }
+
+        $candidates = [
+            dirname(__DIR__) . '/vendor/autoload.php',
+            __DIR__ . '/../vendor/autoload.php',
+            getcwd() . '/vendor/autoload.php',
+        ];
+
+        foreach ($candidates as $autoloadPath) {
+            if (!is_string($autoloadPath) || $autoloadPath === '') {
+                continue;
+            }
+
+            if (is_file($autoloadPath)) {
+                require_once $autoloadPath;
+                if (class_exists($className)) {
+                    return ['loaded' => true, 'source' => $autoloadPath];
+                }
+            }
+        }
+
+        return ['loaded' => false, 'source' => $candidates[0] ?? 'vendor/autoload.php'];
+    }
+
+    function phpmailerMissingIssue(): string
+    {
+        $autoloadInfo = ensureMailerAutoload();
+        if (($autoloadInfo['loaded'] ?? false) === true) {
+            return '';
+        }
+
+        $projectRoot = dirname(__DIR__);
+        $composerJsonPath = $projectRoot . '/composer.json';
+        $vendorAutoloadPath = $projectRoot . '/vendor/autoload.php';
+
+        $composerExists = is_file($composerJsonPath);
+        $vendorExists = is_file($vendorAutoloadPath);
+
+        $parts = [];
+        $parts[] = 'SMTP configure mais PHPMailer est introuvable.';
+
+        if (!$vendorExists) {
+            $parts[] = 'Le dossier vendor/autoload.php est absent.';
+            if ($composerExists) {
+                $parts[] = 'Executez depuis le projet: composer install';
+            } else {
+                $parts[] = 'Initialisez Composer puis installez PHPMailer: composer require phpmailer/phpmailer';
+            }
+        } else {
+            $parts[] = 'vendor/autoload.php existe mais la classe PHPMailer n\'est pas chargee.';
+            $parts[] = 'Verifiez que le package phpmailer/phpmailer est bien installe et non supprime du vendor.';
+        }
+
+        $parts[] = 'Chemin attendu: ' . $vendorAutoloadPath;
+
+        return implode(' ', $parts);
+    }
+
     function smtpConfigIssues(array $config): array
     {
         $issues = [];
@@ -63,10 +126,11 @@ if (!function_exists('sendAppMail')) {
             return ['success' => false, 'error' => implode(' ', $issues)];
         }
 
-        if (!class_exists('PHPMailer\\PHPMailer\\PHPMailer')) {
+        $autoloadInfo = ensureMailerAutoload();
+        if (!(bool) ($autoloadInfo['loaded'] ?? false)) {
             return [
                 'success' => false,
-                'error' => 'SMTP configure mais PHPMailer est manquant. Installez PHPMailer via Composer (composer require phpmailer/phpmailer) et chargez vendor/autoload.php.',
+                'error' => phpmailerMissingIssue(),
             ];
         }
 
@@ -209,7 +273,10 @@ if (!function_exists('sendAppMail')) {
             'reinitialisation_mdp' => 'reinitialisation_mdp.php',
             'nouvelle_alerte_soumise' => 'nouvelle_alerte_soumise.php',
             'alerte_validee' => 'alerte_validee.php',
+            'alerte_rejetee' => 'alerte_rejetee.php',
+            'alerte_rejet_automatique' => 'alerte_rejet_automatique.php',
             'demande_correction' => 'demande_correction.php',
+            'demande_information' => 'demande_information.php',
             'rappel_validation_lead' => 'rappel_validation_lead.php',
             'alerte_urgente_critique' => 'alerte_urgente_critique.php',
         ];

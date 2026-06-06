@@ -390,16 +390,7 @@ if (!function_exists('field_info_tip')) {
                     <label>Biographie</label>
                     <textarea name="bio_organisation" id="user-edit-bio" rows="3" placeholder="Présentation, mandat, zones d'intervention..."></textarea>
 
-                    <label>Nouvelle adresse email (optionnel)</label>
-                    <input type="email" name="new_email" id="user-edit-new-email" placeholder="nouvelle.adresse@exemple.org">
-
-                    <label>Délai d'expiration du lien email</label>
-                    <select name="expires_hours" id="user-edit-expiry" required>
-                        <option value="24">24 heures</option>
-                        <option value="48" selected>48 heures</option>
-                    </select>
-
-                    <p class="inline-hint mb-2">Si vous changez l'email ici, un lien de confirmation sera envoyé à la nouvelle adresse. L'adresse en base ne sera modifiée qu'après confirmation du lien.</p>
+                    <p class="inline-hint mb-2">Le changement d'email se fait uniquement via le bouton <strong>Modifier l'adresse email</strong> pour un meilleur suivi et une traçabilité claire.</p>
 
                     <button type="submit">Enregistrer les modifications</button>
                 </form>

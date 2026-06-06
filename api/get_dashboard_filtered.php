@@ -116,6 +116,9 @@ $locationExpr = $locationCandidates !== []
     ? ('COALESCE(' . implode(', ', $locationCandidates) . ', "")')
     : '""';
 
+$statusExpr = 'COALESCE(NULLIF(TRIM(r.workflow_status), ""), "Brouillon")';
+$statusNormExpr = 'LOWER(REPLACE(REPLACE(REPLACE(' . $statusExpr . ', "é", "e"), "è", "e"), "ê", "e"))';
+
 $gpsLatExpr = $hasGpsLat
     ? ($hasLatitude ? 'COALESCE(r.gps_lat, r.latitude)' : 'r.gps_lat')
     : ($hasLatitude ? 'r.latitude' : 'NULL');
@@ -188,9 +191,12 @@ if ($filterOrgId !== null && $isLeadOrAdmin) {
     }
 }
 
-if (!$isLeadOrAdmin) {
-    // Exigence RBAC: statistiques personnelles pour les rôles organisation/reporter
-    $conditions[] = 'r.' . $reporterFk . ' = :reporter_uid';
+if ($isLeadOrAdmin) {
+    // Vue globale decisionnelle: aucun brouillon visible.
+    $conditions[] = $statusNormExpr . ' <> "brouillon"';
+} else {
+    // Vue organisation: ses alertes + alertes publiées/validées des autres.
+    $conditions[] = '(r.' . $reporterFk . ' = :reporter_uid OR ' . $statusNormExpr . ' IN ("publie", "published", "approuve", "approved", "valide", "validee"))';
     $params['reporter_uid'] = $userId;
 }
 
@@ -201,8 +207,8 @@ $statsSql = '
     SELECT
         COUNT(*) AS total,
         SUM(CASE WHEN LOWER(COALESCE(r.urgency_level, "")) LIKE "%crit%" THEN 1 ELSE 0 END) AS critiques,
-        SUM(CASE WHEN LOWER(COALESCE(r.workflow_status, "")) IN ("soumis", "submitted", "en revue", "under_review") THEN 1 ELSE 0 END) AS attente,
-        SUM(CASE WHEN LOWER(COALESCE(r.workflow_status, "")) IN ("approuve", "approved", "publie") THEN 1 ELSE 0 END) AS valides
+        SUM(CASE WHEN ' . $statusNormExpr . ' IN ("soumis", "submitted", "en revue", "under_review") THEN 1 ELSE 0 END) AS attente,
+        SUM(CASE WHEN ' . $statusNormExpr . ' IN ("approuve", "approved", "publie", "published", "valide", "validee") THEN 1 ELSE 0 END) AS valides
     FROM reports r' . $whereSql;
 
 $statsStmt = $pdo->prepare($statsSql);
@@ -227,10 +233,11 @@ $markersSql = '
         ' . ($hasLocality ? 'r.locality' : '""') . ' AS locality,
         ' . $gpsLatExpr . ' AS gps_lat,
         ' . $gpsLngExpr . ' AS gps_lng,
-        COALESCE(r.workflow_status, "") AS workflow_status,
+        ' . $statusExpr . ' AS workflow_status,
         r.created_at,
         COALESCE(r.incident_label, "") AS incident_label,
-        COALESCE(NULLIF(TRIM(u.organization_name), ""), u.full_name, "Organisation inconnue") AS organization_name
+        COALESCE(NULLIF(TRIM(u.organization_name), ""), u.full_name, "Organisation inconnue") AS organization_name,
+        r.' . $reporterFk . ' AS owner_user_id
     FROM reports r
     LEFT JOIN users u ON u.id = r.' . $reporterFk . $whereSql . '
     ORDER BY r.created_at DESC
@@ -255,6 +262,8 @@ $markers = array_map(static function (array $row): array {
         'created_at'       => (string)($row['created_at']       ?? ''),
         'incident_label'    => (string)($row['incident_label']    ?? ''),
         'organization_name' => (string)($row['organization_name'] ?? ''),
+        'owner_user_id'     => (int)   ($row['owner_user_id']     ?? 0),
+        'can_view_details'  => ((int) ($row['owner_user_id'] ?? 0)) === $userId,
     ];
 }, $rawMarkers);
 

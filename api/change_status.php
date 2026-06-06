@@ -15,6 +15,7 @@
  * - report_id (int)
  * - action (VALIDATE|REJECT|REQUEST_INFO)
  * - comment (string)
+ * - review_delay_hours (24|48|72|168) pour REQUEST_INFO
  * - csrf (token)
  *
  * Sortie:
@@ -54,10 +55,18 @@ try {
     $reportId = (int) ($_POST['report_id'] ?? 0);
     $action = strtoupper(trim((string) ($_POST['action'] ?? '')));
     $comment = trim((string) ($_POST['comment'] ?? ''));
+    $reviewDelayHours = (int) ($_POST['review_delay_hours'] ?? 0);
 
     $allowed = ['VALIDATE', 'REJECT', 'REQUEST_INFO'];
     if ($reportId <= 0 || !in_array($action, $allowed, true)) {
         respond_json(['success' => false, 'ok' => false, 'message' => 'Paramètres invalides'], 422);
+    }
+
+    $allowedDelays = [24, 48, 72, 168];
+    if ($action === 'REQUEST_INFO') {
+        if (!in_array($reviewDelayHours, $allowedDelays, true)) {
+            $reviewDelayHours = 168;
+        }
     }
 
     $config = require __DIR__ . '/../config/config.php';
@@ -75,10 +84,14 @@ try {
 
     $statusMap = [
         'VALIDATE' => ['id' => 3, 'label' => 'Approuvé', 'mail_type' => 'alerte_validee', 'notif_title' => 'Alerte validée', 'status_code' => 'APPROVED'],
-        'REJECT' => ['id' => 4, 'label' => 'Rejeté', 'mail_type' => 'demande_correction', 'notif_title' => 'Alerte rejetée', 'status_code' => 'REJECTED'],
-        'REQUEST_INFO' => ['id' => 2, 'label' => 'Demande information', 'mail_type' => 'demande_correction', 'notif_title' => 'Demande d\'information', 'status_code' => 'UNDER_REVIEW'],
+        'REJECT' => ['id' => 4, 'label' => 'Rejeté', 'mail_type' => 'alerte_rejetee', 'notif_title' => 'Alerte rejetée', 'status_code' => 'REJECTED'],
+        'REQUEST_INFO' => ['id' => 2, 'label' => 'En revue', 'mail_type' => 'demande_information', 'notif_title' => 'Demande d\'information', 'status_code' => 'UNDER_REVIEW'],
     ];
     $target = $statusMap[$action];
+    $reviewDeadline = null;
+    if ($action === 'REQUEST_INFO') {
+        $reviewDeadline = (new DateTimeImmutable('now'))->modify('+' . $reviewDelayHours . ' hours')->format('Y-m-d H:i:s');
+    }
 
     $workflowExpr = in_array('workflow_status', $reportCols, true);
     $statusIdExpr = in_array('status_id', $reportCols, true);
@@ -134,6 +147,10 @@ try {
             $set[] = 'status_id = :status_id';
             $params['status_id'] = $target['id'];
         }
+        if (in_array('review_deadline', $reportCols, true)) {
+            $set[] = 'review_deadline = :review_deadline';
+            $params['review_deadline'] = $action === 'REQUEST_INFO' ? $reviewDeadline : null;
+        }
         if ($set === []) {
             throw new RuntimeException('Aucune colonne de statut disponible sur reports.');
         }
@@ -147,6 +164,9 @@ try {
             $insertParams = [];
 
             $historyNote = $comment !== '' ? $comment : ('Décision appliquée: ' . (string) $target['label']);
+            if ($action === 'REQUEST_INFO' && is_string($reviewDeadline) && $reviewDeadline !== '') {
+                $historyNote .= ' | Délai de réponse: ' . $reviewDeadline;
+            }
             $map = [
                 'report_id' => $reportId,
                 'action' => $action,
@@ -199,7 +219,14 @@ try {
         }
         if ($cols !== []) {
             $notifStmt = $pdo->prepare('INSERT INTO notifications (' . implode(', ', $cols) . ') VALUES (' . implode(', ', $vals) . ')');
-            $notifStmt->execute($bind);
+            try {
+                $notifStmt->execute($bind);
+            } catch (PDOException $e) {
+                // La notification peut déjà exister (contrainte unique) lors d'un retraitement.
+                if ((string) $e->getCode() !== '23000') {
+                    throw $e;
+                }
+            }
         }
 
         $pdo->commit();
@@ -224,7 +251,17 @@ try {
             'details_url' => $reportUrl,
             'lieu' => (string) ($report['location_name'] ?? ''),
             'type_incident' => (string) ($report['report_type'] ?? 'FLASH'),
+            'review_deadline' => (string) ($reviewDeadline ?? ''),
         ];
+
+        if (is_string($reviewDeadline) && $reviewDeadline !== '') {
+            try {
+                $payload['review_deadline_human'] = (new DateTime($reviewDeadline))->format('d/m/Y H:i');
+            } catch (Throwable $e) {
+                $payload['review_deadline_human'] = $reviewDeadline;
+            }
+        }
+
         $mailResult = envoyerNotificationEmail((string) $target['mail_type'], $email, $payload);
     }
 
@@ -242,6 +279,7 @@ try {
                 'success' => false,
                 'error' => (string) ($mailResult['error'] ?? 'Erreur SMTP inconnue'),
             ],
+            'review_deadline' => $reviewDeadline,
         ]);
     }
 
@@ -258,6 +296,7 @@ try {
             'success' => (bool) ($mailResult['success'] ?? false),
             'error' => (string) ($mailResult['error'] ?? ''),
         ],
+        'review_deadline' => $reviewDeadline,
     ]);
 } catch (Exception $e) {
     respond_json([

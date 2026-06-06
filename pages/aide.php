@@ -356,6 +356,12 @@
             <div class="help-v3-pane help-v3-support">
                 <h3 class="h5 mb-2">Support opérationnel</h3>
                 <p class="mb-3">En cas d'incident technique, contactez l'administration GTMP de votre organisation.</p>
+                <p class="mb-3">
+                    <strong>Contacts support:</strong>
+                    <a href="mailto:emmanuelkubiha@gmail.com">emmanuelkubiha@gmail.com</a>
+                    ou
+                    <a href="mailto:it@fosip-drc.org">it@fosip-drc.org</a>
+                </p>
 
                 <div class="row g-3">
                     <div class="col-md-4">

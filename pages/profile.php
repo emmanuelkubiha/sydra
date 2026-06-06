@@ -236,9 +236,20 @@ if ($orgName !== '') {
 
     var cropper = null;
     var cropperModalEl = document.getElementById('cropperModal');
-    var cropperModal = (cropperModalEl && window.bootstrap && window.bootstrap.Modal)
-        ? new window.bootstrap.Modal(cropperModalEl)
-        : null;
+    var cropperModal = null;
+
+    function getCropperModal() {
+        if (!cropperModalEl) {
+            return null;
+        }
+        if (cropperModal) {
+            return cropperModal;
+        }
+        if (window.bootstrap && window.bootstrap.Modal) {
+            cropperModal = new window.bootstrap.Modal(cropperModalEl);
+        }
+        return cropperModal;
+    }
 
     function destroyCropper() {
         if (cropper) {
@@ -336,7 +347,11 @@ if ($orgName !== '') {
     if (logoInput) {
         logoInput.addEventListener('change', function (event) {
             var file = event.target.files && event.target.files[0] ? event.target.files[0] : null;
-            if (!file || !cropperModal || !cropperImage) {
+            var runtimeModal = getCropperModal();
+            if (!file || !runtimeModal || !cropperImage) {
+                if (!runtimeModal) {
+                    setStatus('Le module de rognage n\'est pas disponible. Rechargez la page.', true);
+                }
                 return;
             }
 
@@ -347,8 +362,12 @@ if ($orgName !== '') {
                 if (!result) {
                     return;
                 }
+                if (typeof window.Cropper !== 'function') {
+                    setStatus('Le module de rognage n\'est pas disponible. Rechargez la page.', true);
+                    return;
+                }
                 cropperImage.src = result;
-                cropperModal.show();
+                runtimeModal.show();
                 destroyCropper();
                 cropper = new Cropper(cropperImage, {
                     aspectRatio: 1 / 1,
@@ -374,8 +393,9 @@ if ($orgName !== '') {
                     return;
                 }
 
-                if (cropperModal) {
-                    cropperModal.hide();
+                var runtimeModal = getCropperModal();
+                if (runtimeModal) {
+                    runtimeModal.hide();
                 }
                 uploadCroppedBlob(blob);
             }, 'image/png', 0.95);

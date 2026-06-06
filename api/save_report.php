@@ -111,14 +111,16 @@ try {
     $statusInput = trim((string) ($_POST['status_action'] ?? 'Brouillon'));
     $status = strtolower($statusInput) === 'soumis' ? 'Soumis' : 'Brouillon';
 
-    if ($province === '' || $territory === '' || $healthZone === '' || $groupement === '' || $village === '') {
-        echo json_encode(['ok' => false, 'message' => 'Veuillez renseigner toute la localisation obligatoire.']);
-        exit;
-    }
+    if ($status === 'Soumis') {
+        if ($province === '' || $territory === '' || $healthZone === '' || $groupement === '' || $village === '') {
+            echo json_encode(['ok' => false, 'message' => 'Veuillez renseigner toute la localisation obligatoire.']);
+            exit;
+        }
 
-    if ($incidentType === '' || $description === '' || $analyse === '' || $priorityNeeds === '' || $recommandations === '') {
-        echo json_encode(['ok' => false, 'message' => 'Veuillez compléter les sections Faits et Analyse.']);
-        exit;
+        if ($incidentType === '' || $description === '' || $analyse === '' || $priorityNeeds === '' || $recommandations === '') {
+            echo json_encode(['ok' => false, 'message' => 'Veuillez compléter les sections Faits et Analyse.']);
+            exit;
+        }
     }
 
     if (!in_array($urgencyLevel, ['Faible', 'Moyenne', 'Elevee', 'Critique'], true)) {
@@ -126,8 +128,11 @@ try {
     }
 
     $userId = (int) $_SESSION['auth_user_id'];
-    $title = 'Incident - ' . $incidentType . ' - ' . $village;
-    $locationText = $province . ' / ' . $territory . ' / ' . $village;
+    $requestedDraftId = (int) ($_POST['draft_id'] ?? $_POST['id_brouillon'] ?? $_POST['report_id'] ?? 0);
+    $titleIncident = $incidentType !== '' ? $incidentType : 'Incident en cours';
+    $titleVillage = $village !== '' ? $village : 'localisation a completer';
+    $title = 'Incident - ' . $titleIncident . ' - ' . $titleVillage;
+    $locationText = trim($province . ' / ' . $territory . ' / ' . $village, ' /');
 
     $dataMap = [
         'user_id' => $userId,
@@ -159,13 +164,11 @@ try {
     }
 
     $columns = [];
-    $placeholders = [];
     $params = [];
 
     foreach ($dataMap as $col => $value) {
         if (columnExists($pdo, 'reports', $col)) {
             $columns[] = $col;
-            $placeholders[] = ':' . $col;
             $params[$col] = $value;
         }
     }
@@ -175,20 +178,89 @@ try {
         exit;
     }
 
-    $sql = 'INSERT INTO reports (' . implode(', ', $columns) . ') VALUES (' . implode(', ', $placeholders) . ')';
-    $stmt = $pdo->prepare($sql);
-    foreach ($params as $key => $value) {
-        $paramType = PDO::PARAM_STR;
-        if (is_int($value)) {
-            $paramType = PDO::PARAM_INT;
-        } elseif ($value === null) {
-            $paramType = PDO::PARAM_NULL;
-        }
-        $stmt->bindValue(':' . $key, $value, $paramType);
-    }
-    $stmt->execute();
+    $statusExpr = 'LOWER(REPLACE(REPLACE(REPLACE(COALESCE(NULLIF(TRIM(workflow_status), ""), "brouillon"), "é", "e"), "è", "e"), "ê", "e"))';
+    $existingDraftId = 0;
 
-    $reportId = (int) $pdo->lastInsertId();
+    if ($requestedDraftId > 0) {
+        $targetStmt = $pdo->prepare('SELECT id
+                                     FROM reports
+                                     WHERE id = :id
+                                       AND user_id = :user_id
+                                                                             AND ' . $statusExpr . ' = "brouillon"
+                                     LIMIT 1');
+        $targetStmt->execute([
+            'id' => $requestedDraftId,
+            'user_id' => $userId,
+        ]);
+        $target = $targetStmt->fetch();
+        if (is_array($target)) {
+            $existingDraftId = (int) ($target['id'] ?? 0);
+        }
+    }
+
+    if ($existingDraftId <= 0) {
+        $draftStmt = $pdo->prepare('SELECT id
+                                    FROM reports
+                                    WHERE user_id = :user_id
+                                      AND ' . $statusExpr . ' = "brouillon"
+                                    ORDER BY created_at DESC
+                                    LIMIT 1');
+        $draftStmt->execute(['user_id' => $userId]);
+        $draft = $draftStmt->fetch();
+        if (is_array($draft)) {
+            $existingDraftId = (int) ($draft['id'] ?? 0);
+        }
+    }
+
+    $reportId = 0;
+    $didUpdate = false;
+
+    if ($existingDraftId > 0) {
+        $setParts = [];
+        foreach ($columns as $col) {
+            if ($col === 'user_id') {
+                continue;
+            }
+            $setParts[] = $col . ' = :' . $col;
+        }
+
+        if ($setParts === []) {
+            echo json_encode(['ok' => false, 'message' => 'Aucune colonne modifiable disponible.']);
+            exit;
+        }
+
+        $params['id'] = $existingDraftId;
+        $updateSql = 'UPDATE reports SET ' . implode(', ', $setParts) . ' WHERE id = :id LIMIT 1';
+        $stmt = $pdo->prepare($updateSql);
+        foreach ($params as $key => $value) {
+            $paramType = PDO::PARAM_STR;
+            if (is_int($value)) {
+                $paramType = PDO::PARAM_INT;
+            } elseif ($value === null) {
+                $paramType = PDO::PARAM_NULL;
+            }
+            $stmt->bindValue(':' . $key, $value, $paramType);
+        }
+        $stmt->execute();
+
+        $reportId = $existingDraftId;
+        $didUpdate = true;
+    } else {
+        $placeholders = array_map(static fn (string $col): string => ':' . $col, $columns);
+        $insertSql = 'INSERT INTO reports (' . implode(', ', $columns) . ') VALUES (' . implode(', ', $placeholders) . ')';
+        $stmt = $pdo->prepare($insertSql);
+        foreach ($params as $key => $value) {
+            $paramType = PDO::PARAM_STR;
+            if (is_int($value)) {
+                $paramType = PDO::PARAM_INT;
+            } elseif ($value === null) {
+                $paramType = PDO::PARAM_NULL;
+            }
+            $stmt->bindValue(':' . $key, $value, $paramType);
+        }
+        $stmt->execute();
+        $reportId = (int) $pdo->lastInsertId();
+    }
 
     if (tableExists($pdo, 'report_status_history')) {
         $historyStmt = $pdo->prepare('INSERT INTO report_status_history (report_id, status_label, event_note, changed_by)
@@ -196,7 +268,9 @@ try {
         $historyStmt->execute([
             'report_id' => $reportId,
             'status_label' => $status,
-            'event_note' => $status === 'Soumis' ? 'Rapport soumis au Cluster.' : 'Brouillon enregistré.',
+            'event_note' => $status === 'Soumis'
+                ? ($didUpdate ? 'Brouillon finalisé et soumis au Cluster.' : 'Rapport soumis au Cluster.')
+                : ($didUpdate ? 'Brouillon mis à jour.' : 'Brouillon enregistré.'),
             'changed_by' => $userId,
         ]);
     }

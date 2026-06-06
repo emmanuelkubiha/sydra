@@ -43,6 +43,7 @@ if (!function_exists('loadEnvFile')) {
 $baseDir = dirname(__DIR__);
 loadEnvFile($baseDir . '/.env');
 loadEnvFile($baseDir . '/.env.');
+loadEnvFile($baseDir . '/env.-online');
 
 // Valeurs applicatives normalisees pour toute l'application.
 // Production: APP_URL en https (ex: https://sydra.fosip-drc.org), DB_* dedies, SMTP_* valides.
@@ -51,7 +52,7 @@ return [
     'app_env' => strtolower($_ENV['APP_ENV'] ?? 'development'),
     'app_debug' => !in_array(strtolower($_ENV['APP_DEBUG'] ?? 'false'), ['0', 'false', 'no'], true),
     'app_url' => rtrim($_ENV['APP_URL'] ?? 'https://sydra.fosip-drc.org', '/'),
-    'support_email' => $_ENV['SUPPORT_EMAIL'] ?? $_ENV['ADMIN_EMAIL'] ?? ($_ENV['MAIL_FROM'] ?? 'it@fosip-drc.org'),
+    'support_email' => $_ENV['SUPPORT_EMAIL'] ?? $_ENV['ADMIN_EMAIL'] ?? ($_ENV['MAIL_FROM'] ?? 'emmanuelkubiha@gmail.com'),
     'db' => [
         'host' => $_ENV['DB_HOST'] ?? '127.0.0.1',
         'port' => (int) ($_ENV['DB_PORT'] ?? 8889),

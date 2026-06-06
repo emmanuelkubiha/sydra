@@ -92,6 +92,16 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     if (appLoader) {
+        var skipLoaderOnce = false;
+        try {
+            skipLoaderOnce = window.sessionStorage.getItem('sydraSkipLoaderOnce') === '1';
+            if (skipLoaderOnce) {
+                window.sessionStorage.removeItem('sydraSkipLoaderOnce');
+            }
+        } catch (e) {
+            skipLoaderOnce = false;
+        }
+
         var initialMessages = messageByContext[context] || genericMessages;
         var loaderShownAt = Date.now();
 
@@ -102,13 +112,17 @@ document.addEventListener('DOMContentLoaded', function () {
             window.setTimeout(hideLoader, wait);
         }
 
-        showLoader(initialMessages);
-        window.addEventListener('load', function () {
-            hideLoaderWithMinDelay();
-        });
-        window.setTimeout(function () {
+        if (skipLoaderOnce) {
             hideLoader();
-        }, 3000);
+        } else {
+            showLoader(initialMessages);
+            window.addEventListener('load', function () {
+                hideLoaderWithMinDelay();
+            });
+            window.setTimeout(function () {
+                hideLoader();
+            }, 3000);
+        }
 
         document.querySelectorAll('a[href^="?page="]').forEach(function (link) {
             link.addEventListener('click', function () {
@@ -119,6 +133,15 @@ document.addEventListener('DOMContentLoaded', function () {
         document.querySelectorAll('form').forEach(function (form) {
             form.addEventListener('submit', function () {
                 if (form.classList.contains('js-create-confirm-form')) {
+                    return;
+                }
+
+                // Ce formulaire a sa propre confirmation SweetAlert avant soumission finale.
+                if (form.id === 'user-edit-form') {
+                    return;
+                }
+
+                if (form.classList.contains('js-decision-form')) {
                     return;
                 }
 
@@ -279,16 +302,114 @@ document.addEventListener('DOMContentLoaded', function () {
         }, 4200);
     }
 
+    function sydraPopupClasses() {
+        return {
+            popup: 'rounded-4 border-0 shadow-lg',
+            title: 'fw-bold text-dark',
+            htmlContainer: 'text-start',
+            confirmButton: 'btn btn-primary rounded-3 px-4 py-2 fw-semibold me-2',
+            cancelButton: 'btn btn-light border rounded-3 px-4 py-2 fw-semibold'
+        };
+    }
+
+    function sydraLogoIconHtml() {
+        return '<img src="assets/img/sydra-logo/BLEU-PRIMARY-SYDRA-LOGO.png" alt="SyDRA" style="width:56px;height:56px;object-fit:contain;">';
+    }
+
+    var hasUserEditPopup = !!(window.SYDRA_USER_EDIT_POPUP && typeof window.SYDRA_USER_EDIT_POPUP === 'object' && window.SYDRA_USER_EDIT_POPUP.show === true);
+    var hasEmailChangePopup = !!(window.SYDRA_EMAIL_CHANGE_POPUP && typeof window.SYDRA_EMAIL_CHANGE_POPUP === 'object' && window.SYDRA_EMAIL_CHANGE_POPUP.show === true);
+
     if (Array.isArray(window.SYDRA_FLASHES) && window.SYDRA_FLASHES.length > 0) {
         window.SYDRA_FLASHES.forEach(function (flash, idx) {
             var msg = flash && typeof flash.message === 'string' ? flash.message : '';
             var type = flash && flash.type === 'error' ? 'error' : 'success';
+            if (hasUserEditPopup && context === 'utilisateurs' && msg.indexOf('Utilisateur mis à jour.') === 0) {
+                return;
+            }
+            if (hasEmailChangePopup && context === 'utilisateurs' && (msg.indexOf('Un email de confirmation a été envoyé à la nouvelle adresse.') === 0 || msg.indexOf('Demande enregistrée mais email non envoyé:') === 0)) {
+                return;
+            }
             if (msg.trim() !== '') {
                 window.setTimeout(function () {
                     showToast(msg, type);
                 }, idx * 130);
             }
         });
+    }
+
+    if (hasUserEditPopup && context === 'utilisateurs' && window.Swal && typeof window.Swal.fire === 'function') {
+        var popup = window.SYDRA_USER_EDIT_POPUP;
+        var mailAttempted = popup.mail_attempted === true;
+        var mailSuccess = popup.mail_success === true;
+        var recipient = String(popup.recipient || '').trim();
+        var smtpError = String(popup.error || '').trim();
+
+        var icon = 'info';
+        var title = 'Modification enregistrée';
+        var body = '<p style="margin:0;">Les informations utilisateur ont été mises à jour avec succès.</p>';
+
+        if (mailAttempted && mailSuccess) {
+            icon = 'success';
+            title = 'Modification et email envoyés';
+            body = '<p style="margin:0 0 8px;">Les modifications ont été enregistrées.</p>'
+                + '<p style="margin:0;"><strong>Email :</strong> confirmation envoyée à <strong>' + escapeHtml(recipient || 'la nouvelle adresse') + '</strong>.</p>';
+        } else if (mailAttempted && !mailSuccess) {
+            icon = 'warning';
+            title = 'Modification enregistrée, email non envoyé';
+            body = '<p style="margin:0 0 8px;">Les modifications ont été enregistrées.</p>'
+                + '<p style="margin:0 0 8px;"><strong>Email :</strong> échec d\'envoi à <strong>' + escapeHtml(recipient || 'la nouvelle adresse') + '</strong>.</p>'
+                + (smtpError !== ''
+                    ? ('<p style="margin:0;color:#b91c1c;"><strong>Détail SMTP :</strong> ' + escapeHtml(smtpError) + '</p>')
+                    : '');
+        }
+
+        window.setTimeout(function () {
+            window.Swal.fire({
+                icon: icon,
+                title: title,
+                html: '<div style="text-align:left;padding:2px 2px 0;">' + body + '</div>',
+                confirmButtonText: 'Continuer',
+                buttonsStyling: false,
+                customClass: {
+                    popup: 'rounded-4 border-0 shadow-lg',
+                    title: 'fw-bold text-dark',
+                    htmlContainer: 'text-start',
+                    confirmButton: 'btn btn-primary rounded-3 px-4 py-2 fw-semibold'
+                },
+                iconHtml: sydraLogoIconHtml()
+            });
+        }, 120);
+    }
+
+    if (hasEmailChangePopup && context === 'utilisateurs' && window.Swal && typeof window.Swal.fire === 'function') {
+        var emailPopup = window.SYDRA_EMAIL_CHANGE_POPUP;
+        var emailSuccess = emailPopup.success === true;
+        var emailRecipient = String(emailPopup.recipient || '').trim();
+        var emailError = String(emailPopup.error || '').trim();
+        var expHours = Number(emailPopup.expires_hours || 48);
+
+        window.setTimeout(function () {
+            window.Swal.fire({
+                icon: emailSuccess ? 'success' : 'warning',
+                iconHtml: sydraLogoIconHtml(),
+                title: emailSuccess ? 'Demande email envoyée' : 'Demande enregistrée, email non envoyé',
+                html: '<div style="text-align:left;">'
+                    + '<p style="margin:0 0 8px;">Le changement d\'email est suivi via le flux dédié.</p>'
+                    + '<p style="margin:0 0 8px;"><strong>Destinataire :</strong> ' + escapeHtml(emailRecipient || '-') + '</p>'
+                    + (emailSuccess
+                        ? ('<p style="margin:0;">Le lien de confirmation a été envoyé. Expiration: <strong>' + escapeHtml(String(expHours)) + 'h</strong>.</p>')
+                        : ('<p style="margin:0;color:#b91c1c;"><strong>Détail SMTP :</strong> ' + escapeHtml(emailError || 'Erreur inconnue.') + '</p>'))
+                    + '</div>',
+                confirmButtonText: 'Continuer',
+                buttonsStyling: false,
+                customClass: {
+                    popup: 'rounded-4 border-0 shadow-lg',
+                    title: 'fw-bold text-dark',
+                    htmlContainer: 'text-start',
+                    confirmButton: 'btn btn-primary rounded-3 px-4 py-2 fw-semibold'
+                }
+            });
+        }, 180);
     }
 
     if (window.jQuery && window.jQuery.fn && typeof window.jQuery.fn.DataTable === 'function') {
@@ -948,14 +1069,13 @@ document.addEventListener('DOMContentLoaded', function () {
             window.Swal.fire({
                 title: 'Confirmation de création',
                 html: summaryHtml,
-                imageUrl: 'assets/img/sydra-logo/BLEU-PRIMARY-SYDRA-LOGO.png',
-                imageWidth: 90,
-                imageHeight: 32,
-                imageAlt: 'Logo SyDRA',
+                icon: 'question',
+                iconHtml: sydraLogoIconHtml(),
                 showCancelButton: true,
                 confirmButtonText: 'Valider et envoyer',
                 cancelButtonText: 'Annuler',
-                confirmButtonColor: '#005bbb'
+                buttonsStyling: false,
+                customClass: sydraPopupClasses()
             }).then(function (result) {
                 if (result && result.isConfirmed) {
                     showLoader([
@@ -1037,9 +1157,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
     var emailChangeModal = document.getElementById('emailChangeModal');
     if (emailChangeModal) {
+        var emailChangeForm = emailChangeModal.querySelector('form');
         var emailChangeUserId = document.getElementById('email-change-user-id');
         var emailChangeTarget = document.getElementById('email-change-target');
         var emailChangeInput = document.getElementById('email-change-new-email');
+        var emailChangeExpiry = document.getElementById('email-change-expiry');
 
         document.querySelectorAll('.js-email-change').forEach(function (btn) {
             btn.addEventListener('click', function () {
@@ -1059,6 +1181,45 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             });
         });
+
+        if (emailChangeForm) {
+            emailChangeForm.addEventListener('submit', function (event) {
+                if (!(window.Swal && typeof window.Swal.fire === 'function')) {
+                    return;
+                }
+
+                event.preventDefault();
+                var targetText = emailChangeTarget ? String(emailChangeTarget.textContent || '').trim() : 'Compte ciblé';
+                var newEmail = emailChangeInput ? String(emailChangeInput.value || '').trim() : '';
+                var expiry = emailChangeExpiry ? String(emailChangeExpiry.value || '48').trim() : '48';
+
+                if (newEmail === '') {
+                    showToast('Veuillez saisir une nouvelle adresse email.', 'error');
+                    return;
+                }
+
+                window.Swal.fire({
+                    title: 'Confirmer la demande email',
+                    icon: 'question',
+                    iconHtml: sydraLogoIconHtml(),
+                    html: '<div style="text-align:left;">'
+                        + '<p style="margin:0 0 8px;">Cette action n\'applique pas l\'email immédiatement.</p>'
+                        + '<p style="margin:0 0 8px;"><strong>' + escapeHtml(targetText) + '</strong></p>'
+                        + '<p style="margin:0 0 6px;"><strong>Nouvelle adresse :</strong> ' + escapeHtml(newEmail) + '</p>'
+                        + '<p style="margin:0;"><strong>Expiration lien :</strong> ' + escapeHtml(expiry) + 'h</p>'
+                        + '</div>',
+                    showCancelButton: true,
+                    confirmButtonText: 'Oui, envoyer',
+                    cancelButtonText: 'Annuler',
+                    buttonsStyling: false,
+                    customClass: sydraPopupClasses()
+                }).then(function (result) {
+                    if (result && result.isConfirmed) {
+                        emailChangeForm.submit();
+                    }
+                });
+            });
+        }
     }
 
     var userEditModal = document.getElementById('userEditModal');
@@ -1073,7 +1234,6 @@ document.addEventListener('DOMContentLoaded', function () {
         var userEditPhone = document.getElementById('user-edit-phone');
         var userEditSite = document.getElementById('user-edit-site');
         var userEditBio = document.getElementById('user-edit-bio');
-        var userEditNewEmail = document.getElementById('user-edit-new-email');
 
         document.querySelectorAll('.js-user-edit').forEach(function (btn) {
             btn.addEventListener('click', function () {
@@ -1102,9 +1262,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (userEditBio) {
                     userEditBio.value = btn.getAttribute('data-user-bio') || '';
                 }
-                if (userEditNewEmail) {
-                    userEditNewEmail.value = '';
-                }
                 if (userEditTarget) {
                     var name = btn.getAttribute('data-user-org-name') || btn.getAttribute('data-user-full-name') || 'Organisation';
                     var email = btn.getAttribute('data-user-email') || '-';
@@ -1120,19 +1277,25 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
 
                 event.preventDefault();
-                var hasNewEmail = userEditNewEmail && String(userEditNewEmail.value || '').trim() !== '';
-                var summary = hasNewEmail
-                    ? 'Les informations seront mises à jour. Un email de confirmation (48h) sera envoyé à la nouvelle adresse et l\'email en base ne changera qu\'après validation du lien.'
-                    : 'Les informations de cet utilisateur seront mises à jour immédiatement.';
+                var summary = 'Les informations générales (nom, rôle, statut, contacts, bio) seront mises à jour immédiatement.';
 
                 window.Swal.fire({
-                    title: 'Confirmer la modification',
-                    text: summary,
+                    title: 'Confirmer la mise à jour',
+                    iconHtml: sydraLogoIconHtml(),
+                    html: '<div style="text-align:left;">'
+                        + '<p style="margin:0 0 10px;">Vous êtes sur le point de modifier ce compte organisation.</p>'
+                        + '<div style="padding:10px;border:1px solid #dbe8f7;border-radius:12px;background:#f8fbff;">'
+                        + '<strong style="display:block;margin-bottom:6px;color:#0f172a;">Impact</strong>'
+                        + '<span style="color:#334155;">' + escapeHtml(summary) + '</span>'
+                        + '</div>'
+                        + '<p style="margin:10px 0 0;color:#1d4ed8;"><i class="fa-solid fa-envelope-circle-check me-1"></i>Pour changer l\'email, utilisez le bouton dédié <strong>Modifier l\'adresse email</strong>.</p>'
+                        + '</div>',
                     icon: 'question',
                     showCancelButton: true,
                     confirmButtonText: 'Oui, enregistrer',
                     cancelButtonText: 'Annuler',
-                    confirmButtonColor: '#005bbb'
+                    buttonsStyling: false,
+                    customClass: sydraPopupClasses()
                 }).then(function (result) {
                     if (result && result.isConfirmed) {
                         userEditForm.submit();

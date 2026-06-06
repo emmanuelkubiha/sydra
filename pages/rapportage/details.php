@@ -1,4 +1,10 @@
 <?php
+/**
+ * ROLE DU FICHIER:
+ * - Afficher le détail complet d'une alerte (données, pièces, timeline, carte).
+ * - Piloter la prise de décision Lead/Admin (validation, demande d'infos, rejet).
+ * - Orchestrer les popups SweetAlert2 et l'appel API sécurisé vers change_status.
+ */
 /** @var array<string, mixed>|null $rapportageView */
 /** @var array<int, array<string, mixed>> $rapportageAttachments */
 /** @var array<int, array<string, mixed>> $rapportageTimeline */
@@ -15,6 +21,44 @@ $isDecisionRole = in_array($role, ['ADMIN', 'CLUSTER_LEADER', 'LEAD_GTMP', 'GTMP
 $status = (string) ($rapportageView['workflow_status'] ?? 'Soumis');
 $statusNormalized = strtolower(trim($status));
 $statusNormalized = str_replace(['é', 'è', 'ê'], 'e', $statusNormalized);
+
+// Helpers UI: normalisation et mapping statut -> icône/couleurs.
+if (!function_exists('normalize_status_token')) {
+    function normalize_status_token(string $value): string
+    {
+        $normalized = strtolower(trim($value));
+        $normalized = str_replace(['é', 'è', 'ê', 'à', 'ù', 'ô', 'î', 'ï', 'ç', "'", '-'], ['e', 'e', 'e', 'a', 'u', 'o', 'i', 'i', 'c', ' ', ' '], $normalized);
+        return preg_replace('/\s+/', ' ', $normalized) ?? $normalized;
+    }
+}
+
+if (!function_exists('status_ui_meta')) {
+    /**
+     * @return array{icon:string,text_class:string,bg_class:string,badge_class:string}
+     */
+    function status_ui_meta(string $statusLabel): array
+    {
+        $normalized = normalize_status_token($statusLabel);
+
+        if (str_contains($normalized, 'valide') || str_contains($normalized, 'approuve') || str_contains($normalized, 'publie')) {
+            return ['icon' => 'fa-solid fa-circle-check', 'text_class' => 'text-success', 'bg_class' => 'timeline-dot-success', 'badge_class' => 'text-bg-success'];
+        }
+
+        if (str_contains($normalized, 'rejete') || str_contains($normalized, 'rejet')) {
+            return ['icon' => 'fa-solid fa-circle-xmark', 'text_class' => 'text-danger', 'bg_class' => 'timeline-dot-danger', 'badge_class' => 'text-bg-danger'];
+        }
+
+        if (str_contains($normalized, 'revue') || str_contains($normalized, 'revision') || str_contains($normalized, 'demande information')) {
+            return ['icon' => 'fa-solid fa-hourglass-half', 'text_class' => 'text-warning', 'bg_class' => 'timeline-dot-warning', 'badge_class' => 'text-bg-warning'];
+        }
+
+        if (str_contains($normalized, 'soumis') || str_contains($normalized, 'cree')) {
+            return ['icon' => 'fa-solid fa-paper-plane', 'text_class' => 'text-primary', 'bg_class' => 'timeline-dot-primary', 'badge_class' => 'text-bg-primary'];
+        }
+
+        return ['icon' => 'fa-solid fa-circle-info', 'text_class' => 'text-secondary', 'bg_class' => 'timeline-dot-secondary', 'badge_class' => 'text-bg-secondary'];
+    }
+}
 
 $statusBadgeClass = 'status-badge status-neutral';
 if ($statusNormalized === 'brouillon') {
@@ -40,14 +84,23 @@ $gpsLat = is_numeric($rapportageView['gps_lat'] ?? null) ? (float) $rapportageVi
 $gpsLng = is_numeric($rapportageView['gps_lng'] ?? null) ? (float) $rapportageView['gps_lng'] : null;
 $hasGps = $gpsLat !== null && $gpsLng !== null && $gpsLat !== 0.0 && $gpsLng !== 0.0;
 
+// Le panneau est verrouillé dès qu'une décision est déjà posée.
 $decisionLocked = $isDecisionRole && !in_array($statusNormalized, ['brouillon', 'soumis'], true);
 $latestDecisionEvent = null;
 if (is_array($rapportageTimeline) && $rapportageTimeline !== []) {
     for ($idx = count($rapportageTimeline) - 1; $idx >= 0; $idx--) {
         $candidate = $rapportageTimeline[$idx] ?? null;
         if (is_array($candidate)) {
-            $latestDecisionEvent = $candidate;
-            break;
+            $eventStatus = strtolower(trim((string) ($candidate['status_label'] ?? '')));
+            $eventStatus = str_replace(['é', 'è', 'ê'], 'e', $eventStatus);
+            if (in_array($eventStatus, ['approuve', 'rejete', 'demande information', 'demande d information', 'demande info', 'en revision', 'en revue'], true)) {
+                $latestDecisionEvent = $candidate;
+                break;
+            }
+
+            if ($latestDecisionEvent === null) {
+                $latestDecisionEvent = $candidate;
+            }
         }
     }
 }
@@ -66,6 +119,61 @@ if ($decisionSubmittedRaw !== '') {
         $decisionSubmittedAt = $decisionSubmittedRaw;
     }
 }
+
+$alertSubmittedRaw = trim((string) ($rapportageView['submitted_at'] ?? $rapportageView['created_at'] ?? ''));
+$alertSubmittedAt = $alertSubmittedRaw;
+if ($alertSubmittedRaw !== '') {
+    try {
+        $alertSubmittedAt = (new DateTime($alertSubmittedRaw))->format('d/m/Y H:i');
+    } catch (Throwable $e) {
+        $alertSubmittedAt = $alertSubmittedRaw;
+    }
+}
+
+$decisionLockTone = 'decision-lock-warning';
+if (in_array($statusNormalized, ['valide', 'publie', 'approuve'], true)) {
+    $decisionLockTone = 'decision-lock-success';
+} elseif (in_array($statusNormalized, ['rejete'], true)) {
+    $decisionLockTone = 'decision-lock-danger';
+} elseif (in_array($statusNormalized, ['en revision', 'en revue', 'demande information', 'demande d information', 'demande info'], true)) {
+    $decisionLockTone = 'decision-lock-info';
+}
+
+$aiAnalysisEnabledStatuses = ['soumis', 'en revue', 'en revision', 'demande information', 'demande d information', 'demande info'];
+$isAiAnalysisVisible = $isDecisionRole && in_array($statusNormalized, $aiAnalysisEnabledStatuses, true);
+
+// Métadonnées visuelles du statut courant pour le panneau verrouillé.
+$decisionStatusMeta = status_ui_meta($status);
+$reviewDeadlineRaw = trim((string) ($rapportageView['review_deadline'] ?? ''));
+$reviewDeadlineAt = $reviewDeadlineRaw;
+if ($reviewDeadlineRaw !== '') {
+    try {
+        $reviewDeadlineAt = (new DateTime($reviewDeadlineRaw))->format('d/m/Y H:i');
+    } catch (Throwable $e) {
+        $reviewDeadlineAt = $reviewDeadlineRaw;
+    }
+}
+
+$aiReportContext = [
+    'report_id' => $reportId,
+    'organization_name' => $orgName,
+    'workflow_status' => $status,
+    'report_type' => (string) ($rapportageView['report_type'] ?? 'FLASH'),
+    'urgency_level' => (string) ($rapportageView['urgency_level'] ?? 'Moyenne'),
+    'location_text' => (string) ($rapportageView['location_text'] ?? $rapportageView['province'] ?? ''),
+    'incident_label' => (string) ($rapportageView['incident_label'] ?? ''),
+    'content' => (string) ($rapportageView['content'] ?? ''),
+    'analysis_text' => (string) ($rapportageView['analysis_text'] ?? ''),
+    'additional_notes' => (string) ($rapportageView['additional_notes'] ?? ''),
+    'victims_count' => (int) ($rapportageView['victims_count'] ?? 0),
+    'displaced_households' => (int) ($rapportageView['displaced_households'] ?? 0),
+    'recommendations_text' => (string) ($rapportageView['recommendations_text'] ?? ''),
+    'priority_needs_text' => (string) ($rapportageView['priority_needs_text'] ?? ''),
+];
+$aiReportContextJson = json_encode($aiReportContext, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT);
+if (!is_string($aiReportContextJson)) {
+    $aiReportContextJson = '{}';
+}
 ?>
 
 <div class="card shadow-sm rounded-4 mb-3 rapport-header-card">
@@ -81,6 +189,12 @@ if ($decisionSubmittedRaw !== '') {
                 <span class="mx-2">•</span>
                 <?= htmlspecialchars((string) ($rapportageView['urgency_level'] ?? 'Moyenne'), ENT_QUOTES, 'UTF-8'); ?>
             </p>
+            <?php if ($alertSubmittedAt !== ''): ?>
+                <p class="text-muted small mb-0 mt-1">
+                    <i class="fa-solid fa-calendar-check text-primary me-1"></i>
+                    Soumise le <?= htmlspecialchars($alertSubmittedAt, ENT_QUOTES, 'UTF-8'); ?>
+                </p>
+            <?php endif; ?>
         </div>
 
         <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -216,10 +330,25 @@ if ($decisionSubmittedRaw !== '') {
             <?php else: ?>
                 <ul class="rapportage-timeline">
                     <?php foreach ($rapportageTimeline as $event): ?>
+                        <?php
+                            $timelineLabel = (string) ($event['status_label'] ?? $event['action'] ?? 'Événement');
+                            $timelineMeta = status_ui_meta($timelineLabel);
+                        ?>
                         <li>
-                            <div class="rapportage-timeline-dot"></div>
+                            <div class="rapportage-timeline-dot <?= htmlspecialchars($timelineMeta['bg_class'], ENT_QUOTES, 'UTF-8'); ?>">
+                                <i class="<?= htmlspecialchars($timelineMeta['icon'], ENT_QUOTES, 'UTF-8'); ?> <?= htmlspecialchars($timelineMeta['text_class'], ENT_QUOTES, 'UTF-8'); ?>"></i>
+                            </div>
                             <div>
-                                <strong><?= htmlspecialchars((string) ($event['status_label'] ?? 'Événement'), ENT_QUOTES, 'UTF-8'); ?></strong>
+                                <strong class="d-inline-flex align-items-center gap-2">
+                                    <span><?= htmlspecialchars((string) ($event['status_label'] ?? 'Événement'), ENT_QUOTES, 'UTF-8'); ?></span>
+                                    <span class="badge rounded-pill <?= htmlspecialchars($timelineMeta['badge_class'], ENT_QUOTES, 'UTF-8'); ?>"><?= htmlspecialchars((string) ($event['status_label'] ?? 'Événement'), ENT_QUOTES, 'UTF-8'); ?></span>
+                                </strong>
+                                <?php if ((int) ($event['is_decision_change'] ?? 0) === 1): ?>
+                                    <span class="badge decision-change-badge ms-2">Décision modifiée</span>
+                                <?php endif; ?>
+                                <?php if (trim((string) ($event['change_note'] ?? '')) !== ''): ?>
+                                    <p class="mb-1 small decision-change-note"><?= htmlspecialchars((string) $event['change_note'], ENT_QUOTES, 'UTF-8'); ?></p>
+                                <?php endif; ?>
                                 <p class="mb-1 text-muted"><?= htmlspecialchars((string) ($event['event_note'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></p>
                                 <small class="text-muted"><?= htmlspecialchars((string) ($event['created_at'] ?? ''), ENT_QUOTES, 'UTF-8'); ?> • <?= htmlspecialchars((string) ($event['actor_name'] ?? 'Système'), ENT_QUOTES, 'UTF-8'); ?></small>
                             </div>
@@ -231,46 +360,115 @@ if ($decisionSubmittedRaw !== '') {
     </div>
 </div>
 
-<?php if ($isDecisionRole): ?>
-<div id="decision-action-panel" class="card shadow-sm rounded-4 mt-3 rapportage-decision-panel border-0"<?= $decisionLocked ? ' style="display:none;"' : ''; ?>>
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-        <h2 class="h5 mb-0">Panneau de décision Lead GTMP</h2>
+<?php if ($isAiAnalysisVisible): ?>
+<button type="button"
+        class="btn btn-primary ai-analysis-fab"
+        data-bs-toggle="offcanvas"
+        data-bs-target="#aiAnalysisOffcanvas"
+        aria-controls="aiAnalysisOffcanvas">
+    <i class="fa-solid fa-robot me-1"></i>Discuter avec l'IA
+</button>
+
+<div class="offcanvas offcanvas-end ai-analysis-offcanvas" tabindex="-1" id="aiAnalysisOffcanvas" aria-labelledby="aiAnalysisOffcanvasLabel">
+    <div class="offcanvas-header border-bottom">
+        <h2 class="offcanvas-title h6 mb-0" id="aiAnalysisOffcanvasLabel">
+            <i class="fa-solid fa-brain me-2 text-primary"></i>Assistant d'analyse décisionnelle
+        </h2>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Fermer"></button>
+    </div>
+    <div class="offcanvas-body d-flex flex-column p-0">
+        <div class="ai-analysis-chat" id="ai-analysis-chat"></div>
+        <form id="ai-analysis-form" class="ai-analysis-form border-top">
+            <input type="hidden" id="ai-analysis-csrf" value="<?= htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
+            <textarea id="ai-analysis-input" class="form-control" rows="2" placeholder="Ex: Fais-moi un résumé de 2 lignes" required></textarea>
+            <button type="submit" class="btn btn-primary" id="ai-analysis-send">
+                <i class="fa-solid fa-paper-plane"></i>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div id="decision-action-panel" class="card border-0 shadow-sm rounded-4 mt-3 rapportage-decision-panel"<?= $decisionLocked ? ' style="display:none;"' : ''; ?>>
+    <div class="card-header decision-panel-header border-0 rounded-top-4 px-4 py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h2 class="h5 mb-0 d-flex align-items-center gap-2">
+            <i class="fa-solid fa-gavel"></i>
+            <span>Prise de décision (Cluster)</span>
+        </h2>
         <span class="badge text-bg-light border">Validation intelligente</span>
     </div>
+    <div class="card-body p-4">
+        <div id="decision-reopen-banner" class="alert alert-warning rounded-4 border-0 d-flex justify-content-between align-items-center gap-3 mb-3" style="display:none;">
+            <div>
+                <strong>Réouverture en cours.</strong>
+                Choisissez une nouvelle décision pour finaliser la modification.
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-secondary rounded-3 js-cancel-reopen">
+                Annuler la réouverture
+            </button>
+        </div>
 
-    <div class="d-flex flex-wrap gap-2">
-        <form method="post" action="?page=rapportage-voir&id=<?= $reportId; ?>" class="inline-form js-decision-form" data-api-action="VALIDATE">
-            <input type="hidden" name="action" value="lead_report_decision">
-            <input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
-            <input type="hidden" name="report_id" value="<?= $reportId; ?>">
-            <input type="hidden" name="decision" value="publish">
-            <input type="hidden" name="decision_comment" value="Validation Lead GTMP.">
-            <button type="submit" class="btn rapportage-btn-success"><i class="fa-solid fa-badge-check me-1"></i>Valider et Publier</button>
-        </form>
+        <div class="row g-3">
+            <div class="col-md-4">
+                <form method="post" action="?page=rapportage-voir&id=<?= $reportId; ?>" class="inline-form js-decision-form h-100" data-api-action="VALIDATE">
+                    <input type="hidden" name="action" value="lead_report_decision">
+                    <input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
+                    <input type="hidden" name="report_id" value="<?= $reportId; ?>">
+                    <input type="hidden" name="decision" value="publish">
+                    <input type="hidden" name="decision_comment" value="Validation Lead GTMP.">
+                    <button type="submit" class="btn decision-action-card decision-action-success w-100 h-100">
+                        <span class="decision-action-icon"><i class="bi bi-check2-circle"></i></span>
+                        <span class="decision-action-title">Valider &amp; Publier</span>
+                        <span class="decision-action-subtitle">Publication immédiate et notification organisation</span>
+                    </button>
+                </form>
+            </div>
 
-        <button type="button" class="btn rapportage-btn-info" data-bs-toggle="modal" data-bs-target="#decisionInfoModal">
-            <i class="fa-solid fa-circle-question me-1"></i>Demander des informations
-        </button>
+            <div class="col-md-4">
+                <button type="button" class="btn decision-action-card decision-action-info w-100 h-100" data-bs-toggle="modal" data-bs-target="#decisionInfoModal">
+                    <span class="decision-action-icon"><i class="fa-solid fa-circle-question"></i></span>
+                    <span class="decision-action-title">Demander des infos</span>
+                    <span class="decision-action-subtitle">Renvoi au reporter pour précisions ciblées</span>
+                </button>
+            </div>
 
-        <button type="button" class="btn rapportage-btn-danger" data-bs-toggle="modal" data-bs-target="#decisionRejectModal">
-            <i class="fa-solid fa-ban me-1"></i>Rejeter
-        </button>
+            <div class="col-md-4">
+                <button type="button" class="btn decision-action-card decision-action-danger w-100 h-100" data-bs-toggle="modal" data-bs-target="#decisionRejectModal">
+                    <span class="decision-action-icon"><i class="fa-solid fa-ban"></i></span>
+                    <span class="decision-action-title">Rejeter</span>
+                    <span class="decision-action-subtitle">Clôture avec justification et notification</span>
+                </button>
+            </div>
+        </div>
     </div>
 </div>
 
 <?php if ($decisionLocked): ?>
-<div id="decision-lock-box" class="card shadow-sm rounded-4 mt-3 border-0 decision-locked-box">
-    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
-        <div>
-            <h2 class="h5 mb-2"><i class="fa-solid fa-lock me-2"></i>Décision déjà soumise</h2>
-            <p class="mb-1"><strong>Statut actuel :</strong> <?= htmlspecialchars($status, ENT_QUOTES, 'UTF-8'); ?></p>
-            <p class="mb-1"><strong>Commentaire du Lead :</strong> <?= nl2br(htmlspecialchars($decisionComment, ENT_QUOTES, 'UTF-8')); ?></p>
-            <p class="mb-0"><strong>Soumis le :</strong> <?= htmlspecialchars($decisionSubmittedAt !== '' ? $decisionSubmittedAt : 'Date indisponible', ENT_QUOTES, 'UTF-8'); ?></p>
-        </div>
-        <div>
-            <button type="button" class="btn btn-warning text-dark fw-semibold js-reopen-decision">
-                <i class="fa-solid fa-rotate-left me-1"></i>Modifier la décision
-            </button>
+<div id="decision-lock-box" class="card shadow-sm rounded-4 mt-3 border-0 decision-locked-box <?= htmlspecialchars($decisionLockTone, ENT_QUOTES, 'UTF-8'); ?>">
+    <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+            <div>
+                <h2 class="h5 mb-2 d-flex align-items-center gap-2"><i class="fa-solid fa-lock"></i>Décision déjà soumise</h2>
+                <p class="mb-1 d-flex align-items-center gap-2 flex-wrap">
+                    <strong>Statut actuel :</strong>
+                    <span class="badge rounded-pill fs-6 <?= htmlspecialchars($decisionStatusMeta['badge_class'], ENT_QUOTES, 'UTF-8'); ?>">
+                        <i class="<?= htmlspecialchars($decisionStatusMeta['icon'], ENT_QUOTES, 'UTF-8'); ?> me-1"></i>
+                        <?= htmlspecialchars($status, ENT_QUOTES, 'UTF-8'); ?>
+                    </span>
+                </p>
+                <p class="mb-2"><strong>Soumis le :</strong> <?= htmlspecialchars($decisionSubmittedAt !== '' ? $decisionSubmittedAt : 'Date indisponible', ENT_QUOTES, 'UTF-8'); ?></p>
+                <?php if (in_array($statusNormalized, ['en revision', 'en revue', 'demande information', 'demande d information', 'demande info'], true) && $reviewDeadlineAt !== ''): ?>
+                    <p class="mb-2"><strong>Délai de réponse :</strong> <?= htmlspecialchars($reviewDeadlineAt, ENT_QUOTES, 'UTF-8'); ?></p>
+                <?php endif; ?>
+                <div class="decision-comment-box">
+                    <strong>Commentaire du Lead :</strong>
+                    <div class="mt-1"><?= nl2br(htmlspecialchars($decisionComment, ENT_QUOTES, 'UTF-8')); ?></div>
+                </div>
+            </div>
+            <div class="align-self-end">
+                <button type="button" class="btn btn-sydra-secondary rounded-3 fw-semibold js-reopen-decision">
+                    <i class="fa-solid fa-pen-to-square me-1"></i>Modifier la décision
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -278,9 +476,9 @@ if ($decisionSubmittedRaw !== '') {
 
 <div class="modal fade" id="decisionInfoModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content">
+        <div class="modal-content decision-modal-content border-0 rounded-4">
             <form method="post" action="?page=rapportage-voir&id=<?= $reportId; ?>" class="js-decision-form" data-api-action="REQUEST_INFO">
-                <div class="modal-header">
+                <div class="modal-header decision-modal-header border-0">
                     <h5 class="modal-title">Demande d'informations supplémentaires</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
                 </div>
@@ -291,7 +489,7 @@ if ($decisionSubmittedRaw !== '') {
                     <input type="hidden" name="decision" value="request_info">
 
                     <label for="decision_info_reason" class="form-label">Raison de la demande</label>
-                    <select id="decision_info_reason" name="decision_reason" class="form-select mb-3" required>
+                    <select id="decision_info_reason" name="decision_reason" class="form-select mb-3">
                         <option value="">Sélectionner une raison</option>
                         <option value="Manque d'informations précises">Manque d'informations précises</option>
                         <option value="Localisation incomplète">Localisation incomplète</option>
@@ -304,7 +502,7 @@ if ($decisionSubmittedRaw !== '') {
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
-                    <button type="submit" class="btn rapportage-btn-info">Envoyer la demande</button>
+                    <button type="submit" class="btn btn-sydra-secondary">Envoyer la demande</button>
                 </div>
             </form>
         </div>
@@ -313,9 +511,9 @@ if ($decisionSubmittedRaw !== '') {
 
 <div class="modal fade" id="decisionRejectModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content">
+        <div class="modal-content decision-modal-content border-0 rounded-4">
             <form method="post" action="?page=rapportage-voir&id=<?= $reportId; ?>" class="js-decision-form" data-api-action="REJECT">
-                <div class="modal-header">
+                <div class="modal-header decision-modal-header border-0">
                     <h5 class="modal-title">Rejeter l'alerte</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
                 </div>
@@ -339,7 +537,7 @@ if ($decisionSubmittedRaw !== '') {
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
-                    <button type="submit" class="btn rapportage-btn-danger">Confirmer le rejet</button>
+                    <button type="submit" class="btn btn-sydra-danger">Confirmer le rejet</button>
                 </div>
             </form>
         </div>
@@ -398,55 +596,417 @@ if ($decisionSubmittedRaw !== '') {
     padding: 20px;
 }
 
-.rapportage-decision-panel .btn,
-.rapportage-decision-panel .btn i,
-.modal .rapportage-btn-success,
-.modal .rapportage-btn-success i,
-.modal .rapportage-btn-info,
-.modal .rapportage-btn-info i,
-.modal .rapportage-btn-danger,
-.modal .rapportage-btn-danger i {
+
+
+.rapportage-decision-panel {
+    border: 1px solid #0050a6;
+    overflow: hidden;
+    background: linear-gradient(180deg, #0664cc 0%, #005bbb 100%);
+}
+
+.decision-panel-header {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(2px);
+}
+
+.rapportage-decision-panel .card-header h2,
+.rapportage-decision-panel .card-header i {
+    color: #ffffff;
+}
+
+.rapportage-decision-panel .card-header .badge {
+    background: rgba(255, 255, 255, 0.18) !important;
+    color: #ffffff !important;
+    border-color: rgba(255, 255, 255, 0.35) !important;
+}
+
+.decision-action-card {
+    min-height: 126px;
+    border-radius: 14px;
+    border: 1px solid transparent;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 8px;
+    text-align: left;
+    transition: all 0.3s ease;
+    transform: translateY(0);
+}
+
+.decision-action-card:hover,
+.decision-action-card:focus {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 24px rgba(0, 91, 187, 0.18);
+}
+
+.decision-action-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    background: rgba(255, 255, 255, 0.7);
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.1);
+}
+
+.decision-action-success .decision-action-icon i {
     color: #ffffff !important;
 }
 
-.rapportage-btn-success,
-.rapportage-btn-info,
-.rapportage-btn-danger {
+.decision-action-info .decision-action-icon i {
+    color: #ffffff !important;
+}
+
+.decision-action-danger .decision-action-icon i {
+    color: #ffffff !important;
+}
+
+.decision-action-title {
+    font-size: 1.03rem;
     font-weight: 700;
 }
 
-.rapportage-btn-success:hover,
-.rapportage-btn-success:focus,
-.rapportage-btn-success:active {
-    background: #15803d !important;
-    border-color: #15803d !important;
+.decision-action-subtitle {
+    font-size: 0.86rem;
+    opacity: 0.93;
+}
+
+.decision-action-success {
+    background: linear-gradient(145deg, #0ea86a 0%, #0a8f5a 100%);
+    border-color: #32c187;
     color: #ffffff !important;
 }
 
-.rapportage-btn-info:hover,
-.rapportage-btn-info:focus,
-.rapportage-btn-info:active {
-    background: #0369a1 !important;
-    border-color: #0369a1 !important;
+.decision-action-info {
+    background: linear-gradient(145deg, #0d7fd3 0%, #0869b1 100%);
+    border-color: #4aa7ea;
     color: #ffffff !important;
 }
 
-.rapportage-btn-danger:hover,
-.rapportage-btn-danger:focus,
-.rapportage-btn-danger:active {
-    background: #b91c1c !important;
-    border-color: #b91c1c !important;
+.decision-action-danger {
+    background: linear-gradient(145deg, #d93450 0%, #b6263e 100%);
+    border-color: #f06d84;
     color: #ffffff !important;
 }
 
-.decision-locked-box {
-    border: 1px solid #f6e0ac;
+.decision-action-title,
+.decision-action-subtitle {
+    color: #ffffff;
+}
+
+.decision-lock-box {
+    border-left: 6px solid #f59e0b;
     background: linear-gradient(140deg, #fffdf5 0%, #fff8e6 100%);
+}
+
+.decision-lock-success {
+    border-left-color: #10b981;
+    background: linear-gradient(140deg, #f2fff8 0%, #ebfdf4 100%);
+}
+
+.decision-lock-danger {
+    border-left-color: #ef4444;
+    background: linear-gradient(140deg, #fff5f5 0%, #ffecec 100%);
+}
+
+.decision-lock-info {
+    border-left-color: #0ea5e9;
+    background: linear-gradient(140deg, #f2fbff 0%, #e6f5ff 100%);
+}
+
+.decision-lock-warning {
+    border-left-color: #f59e0b;
+}
+
+.decision-comment-box {
+    background: rgba(248, 250, 252, 0.95);
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    padding: 12px;
+    font-style: italic;
+}
+
+.decision-change-badge {
+    background: #e8f1ff;
+    color: #005bbb;
+    border: 1px solid #cfe1ff;
+    font-weight: 600;
+}
+
+.decision-change-note {
+    color: #005bbb;
+    font-weight: 600;
+}
+
+.decision-modal-content {
+    box-shadow: 0 20px 48px rgba(15, 23, 42, 0.18);
+}
+
+.decision-modal-header {
+    background: linear-gradient(135deg, #f1f7ff 0%, #e4f0ff 100%);
+    border-bottom: 1px solid #d8e8ff !important;
+}
+
+.decision-modal-content .modal-body .form-control,
+.decision-modal-content .modal-body .form-select {
+    border-radius: 10px;
+    border-color: #cfe1ff;
+    background: #f9fcff;
+}
+
+.decision-modal-content .modal-body .form-control:focus,
+.decision-modal-content .modal-body .form-select:focus {
+    border-color: #005bbb;
+    box-shadow: 0 0 0 0.2rem rgba(0, 91, 187, 0.15);
+}
+
+.btn-sydra-secondary,
+.btn-sydra-danger {
+    border-radius: 10px;
+    font-weight: 700;
+    padding: 0.48rem 0.95rem;
+}
+
+.btn-sydra-secondary {
+    background: #005bbb;
+    color: #ffffff;
+    border: 1px solid #005bbb;
+}
+
+.btn-sydra-secondary:hover,
+.btn-sydra-secondary:focus {
+    background: #004a97;
+    border-color: #004a97;
+    color: #ffffff;
+}
+
+.btn-sydra-danger {
+    background: #d7263d;
+    color: #ffffff;
+    border: 1px solid #d7263d;
+}
+
+.btn-sydra-danger:hover,
+.btn-sydra-danger:focus {
+    background: #b81e33;
+    border-color: #b81e33;
+    color: #ffffff;
+}
+
+.sydra-swal-popup {
+    border-radius: 1rem !important;
+    border: 0 !important;
+    box-shadow: 0 1rem 2.5rem rgba(15, 23, 42, 0.24) !important;
+}
+
+.sydra-swal-popup .swal2-title {
+    font-size: 1.08rem !important;
+    line-height: 1.35 !important;
+}
+
+.sydra-swal-popup .swal2-html-container {
+    font-size: 0.92rem !important;
+    line-height: 1.45 !important;
+    margin-top: 0.4rem !important;
+}
+
+.sydra-swal-popup .swal2-input-label {
+    font-size: 0.84rem !important;
+    font-weight: 600 !important;
+    color: #334155 !important;
+    margin: 0.38rem 0 0.22rem !important;
+}
+
+.sydra-swal-confirm,
+.sydra-swal-cancel {
+    border-radius: 0.75rem !important;
+    padding: 0.42rem 0.9rem !important;
+    font-size: 0.86rem !important;
+    font-weight: 700 !important;
+}
+
+.sydra-swal-confirm {
+    background: #005bbb !important;
+    color: #fff !important;
+}
+
+.sydra-swal-cancel {
+    background: #f8fafc !important;
+    color: #334155 !important;
+    border: 1px solid #cbd5e1 !important;
+}
+
+.sydra-swal-input {
+    background: #f8fafc !important;
+    border: 1px solid #dbeafe !important;
+    border-radius: 0.75rem !important;
+    min-height: 120px !important;
+}
+
+.sydra-swal-input:focus {
+    border-color: #005bbb !important;
+    box-shadow: 0 0 0 0.2rem rgba(0, 91, 187, 0.2) !important;
+}
+
+.mail-help-box {
+    margin-top: 0.45rem;
+    border: 1px solid #fed7aa;
+    background: #fff7ed;
+    border-radius: 10px;
+    padding: 10px 12px;
+}
+
+.mail-help-box strong {
+    color: #9a3412;
+}
+
+.mail-help-list {
+    margin: 0.3rem 0 0;
+    padding-left: 1.1rem;
+}
+
+.mail-help-list li {
+    margin-bottom: 0.18rem;
+    color: #7c2d12;
+}
+
+.sydra-swal-icon-logo {
+    border: 0 !important;
+    width: 4.2em !important;
+    height: 4.2em !important;
+    margin: 0.35em auto 0.5em !important;
+}
+
+.sydra-swal-icon-logo .swal2-icon-content {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+}
+
+.sydra-swal-icon-logo img {
+    width: 54px;
+    height: 54px;
+    object-fit: contain;
+}
+
+.sydra-swal-icon-pulse {
+    animation: sydraPulseIcon 1.15s ease-in-out infinite;
+}
+
+.rapportage-timeline-dot {
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #dbe2ea;
+}
+
+.rapportage-timeline-dot i {
+    font-size: 0.95rem;
+}
+
+.timeline-dot-primary {
+    background: rgba(59, 130, 246, 0.15);
+}
+
+.timeline-dot-success {
+    background: rgba(16, 185, 129, 0.14);
+}
+
+.timeline-dot-danger {
+    background: rgba(239, 68, 68, 0.14);
+}
+
+.timeline-dot-warning {
+    background: rgba(245, 158, 11, 0.18);
+}
+
+.timeline-dot-secondary {
+    background: rgba(100, 116, 139, 0.15);
+}
+
+.ai-analysis-fab {
+    position: fixed;
+    right: 18px;
+    bottom: 22px;
+    z-index: 1080;
+    border-radius: 999px;
+    padding: 0.55rem 1rem;
+    box-shadow: 0 14px 24px rgba(0, 91, 187, 0.28);
+}
+
+.ai-analysis-offcanvas {
+    width: min(460px, 96vw);
+}
+
+.ai-analysis-chat {
+    flex: 1;
+    overflow-y: auto;
+    background: #f8fafc;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.ai-analysis-bubble {
+    max-width: 86%;
+    border-radius: 14px;
+    padding: 9px 11px;
+    line-height: 1.42;
+    white-space: pre-wrap;
+}
+
+.ai-analysis-bubble.user {
+    align-self: flex-end;
+    background: #005BBB;
+    color: #fff;
+    border-bottom-right-radius: 8px;
+}
+
+.ai-analysis-bubble.assistant {
+    align-self: flex-start;
+    background: #e2e8f0;
+    color: #0f172a;
+    border-bottom-left-radius: 8px;
+}
+
+.ai-analysis-form {
+    display: flex;
+    gap: 8px;
+    padding: 10px;
+    background: #fff;
+}
+
+.ai-analysis-form textarea {
+    resize: none;
+}
+
+@keyframes sydraPulseIcon {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.06);
+    }
+    100% {
+        transform: scale(1);
+    }
 }
 </style>
 
 <script>
 (function () {
+    // Mini-carte locale de l'incident pour consultation rapide.
     function initMiniMap() {
         var mapEl = document.getElementById('incident-mini-map');
         if (!mapEl) {
@@ -487,19 +1047,111 @@ if ($decisionSubmittedRaw !== '') {
         }).addTo(miniMap);
     }
 
+    // Branche les formulaires de décision vers la soumission AJAX + SweetAlert2.
     function bindDecisionForms() {
         var forms = document.querySelectorAll('.js-decision-form');
         if (!forms || forms.length === 0) {
             return;
         }
 
+        // Classes partagées pour uniformiser le style de tous les popups.
+        function getSwalBootstrapClasses() {
+            return {
+                popup: 'sydra-swal-popup rounded-4 border-0 shadow-lg',
+                title: 'fw-bold text-dark',
+                htmlContainer: 'text-start',
+                icon: 'sydra-swal-icon-logo',
+                input: 'sydra-swal-input bg-light border-0 rounded-3',
+                confirmButton: 'btn rounded-3 px-3 py-1 fw-semibold sydra-swal-confirm',
+                cancelButton: 'btn rounded-3 px-3 py-1 fw-semibold sydra-swal-cancel'
+            };
+        }
+
+        function animateSwalIcon() {
+            var iconEl = document.querySelector('.swal2-icon');
+            if (iconEl) {
+                iconEl.classList.add('sydra-swal-icon-pulse');
+            }
+        }
+
+        function swalLogoIconHtml() {
+            return '<img src="assets/img/sydra-logo/BLEU-PRIMARY-SYDRA-LOGO.png" alt="SyDRA">';
+        }
+
+        // Gère la réouverture temporaire d'une décision déjà verrouillée.
         function bindDecisionReopen() {
             var reopenButton = document.querySelector('.js-reopen-decision');
             var lockBox = document.getElementById('decision-lock-box');
             var actionPanel = document.getElementById('decision-action-panel');
+            var reopenBanner = document.getElementById('decision-reopen-banner');
+            var cancelReopenButton = document.querySelector('.js-cancel-reopen');
+            var reopenTimeoutId = null;
+
+            function relockIfNoSubmission(showInfo) {
+                if (!lockBox || !actionPanel) {
+                    return;
+                }
+
+                actionPanel.style.display = 'none';
+                lockBox.style.display = '';
+                actionPanel.setAttribute('data-reopen-mode', '0');
+                if (reopenBanner) {
+                    reopenBanner.style.display = 'none';
+                }
+
+                if (reopenTimeoutId !== null) {
+                    window.clearTimeout(reopenTimeoutId);
+                    reopenTimeoutId = null;
+                }
+
+                if (!showInfo || !(window.Swal && typeof window.Swal.fire === 'function')) {
+                    return;
+                }
+
+                window.Swal.fire({
+                    icon: 'info',
+                    iconHtml: swalLogoIconHtml(),
+                    title: 'Panneau reverrouillé',
+                    text: 'Aucune nouvelle décision n\'a été soumise.',
+                    customClass: getSwalBootstrapClasses(),
+                    buttonsStyling: false,
+                    confirmButtonText: 'Compris',
+                    didOpen: animateSwalIcon
+                });
+            }
+
+            function enableTemporaryReopen() {
+                if (!lockBox || !actionPanel) {
+                    return;
+                }
+
+                lockBox.style.display = 'none';
+                actionPanel.style.display = '';
+                actionPanel.setAttribute('data-reopen-mode', '1');
+                if (reopenBanner) {
+                    reopenBanner.style.display = '';
+                }
+
+                if (reopenTimeoutId !== null) {
+                    window.clearTimeout(reopenTimeoutId);
+                }
+
+                // La réouverture est temporaire: sans nouvelle soumission, on reverrouille.
+                reopenTimeoutId = window.setTimeout(function () {
+                    if (actionPanel.getAttribute('data-reopen-mode') === '1') {
+                        relockIfNoSubmission(true);
+                    }
+                }, 120000);
+            }
 
             if (!reopenButton || !lockBox || !actionPanel) {
                 return;
+            }
+
+            if (cancelReopenButton) {
+                cancelReopenButton.addEventListener('click', function () {
+                    relockIfNoSubmission(false);
+                });
             }
 
             reopenButton.addEventListener('click', function () {
@@ -508,36 +1160,43 @@ if ($decisionSubmittedRaw !== '') {
                     if (!ok) {
                         return;
                     }
-                    lockBox.style.display = 'none';
-                    actionPanel.style.display = '';
+                    enableTemporaryReopen();
                     return;
                 }
 
                 window.Swal.fire({
                     title: 'Modifier la décision ?',
-                    text: 'Attention : La réouverture de cette alerte annulera la décision précédente. Vous devrez soumettre une nouvelle décision (Validation, Rejet ou Demande d\'info), et un nouvel email sera envoyé à l\'organisation pour l\'informer de ce changement.',
+                    html: '<p style="margin:0;">Attention : La réouverture de cette alerte annulera la décision précédente. Vous devrez soumettre une nouvelle décision (Validation, Rejet ou Demande d\'info), et un nouvel email sera envoyé à l\'organisation pour l\'informer de ce changement.</p>',
                     icon: 'warning',
+                    iconHtml: swalLogoIconHtml(),
                     showCancelButton: true,
-                    confirmButtonText: 'Oui, réouvrir l\'alerte',
+                    confirmButtonText: 'Oui, réouvrir',
                     cancelButtonText: 'Annuler',
-                    confirmButtonColor: '#dc2626',
-                    cancelButtonColor: '#6b7280',
-                    reverseButtons: true
+                    reverseButtons: true,
+                    customClass: getSwalBootstrapClasses(),
+                    buttonsStyling: false,
+                    didOpen: animateSwalIcon
                 }).then(function (result) {
                     if (!result || !result.isConfirmed) {
                         return;
                     }
 
-                    lockBox.style.display = 'none';
-                    actionPanel.style.display = '';
+                    enableTemporaryReopen();
                 });
             });
         }
 
+        // Libellés front pour confirmations/résultats d'actions.
         var actionLabels = {
             VALIDATE: 'Valider et publier',
             REQUEST_INFO: 'Demander des informations',
             REJECT: 'Rejeter'
+        };
+
+        var actionResultLabels = {
+            VALIDATE: 'Validation',
+            REQUEST_INFO: 'Demande d\'informations',
+            REJECT: 'Rejet'
         };
 
         var actionImpacts = {
@@ -567,6 +1226,7 @@ if ($decisionSubmittedRaw !== '') {
                 .replace(/'/g, '&#039;');
         }
 
+        // Confirmation générique pour Validation/Rejet.
         function confirmDecision(apiAction, payloadComment) {
             var impacts = actionImpacts[apiAction] || [];
             var title = actionLabels[apiAction] || 'Soumettre la décision';
@@ -578,7 +1238,10 @@ if ($decisionSubmittedRaw !== '') {
                 : '';
 
             if (!(window.Swal && typeof window.Swal.fire === 'function')) {
-                return Promise.resolve(window.confirm('Confirmer la décision: ' + title + ' ?'));
+                return Promise.resolve({
+                    isConfirmed: window.confirm('Confirmer la décision: ' + title + ' ?'),
+                    payloadComment: payloadComment
+                });
             }
 
             return window.Swal.fire({
@@ -588,23 +1251,152 @@ if ($decisionSubmittedRaw !== '') {
                     + '<ul style="padding-left:18px;margin:0 0 4px;">' + impactsHtml + '</ul>'
                     + commentHtml
                     + '</div>',
+                input: apiAction === 'VALIDATE' ? 'textarea' : undefined,
+                inputLabel: apiAction === 'VALIDATE' ? 'Commentaire de validation (modifiable)' : undefined,
+                inputValue: apiAction === 'VALIDATE' ? payloadComment : undefined,
+                inputPlaceholder: apiAction === 'VALIDATE' ? 'Ex: Validation confirmée après revue du dossier.' : undefined,
                 icon: 'question',
+                iconHtml: swalLogoIconHtml(),
                 showCancelButton: true,
                 confirmButtonText: 'Oui, confirmer',
                 cancelButtonText: 'Annuler',
-                confirmButtonColor: '#005bbb',
-                cancelButtonColor: '#94a3b8',
-                reverseButtons: true
+                reverseButtons: true,
+                customClass: getSwalBootstrapClasses(),
+                buttonsStyling: false,
+                didOpen: animateSwalIcon
             }).then(function (result) {
-                return !!(result && result.isConfirmed);
+                var finalComment = payloadComment;
+                if (apiAction === 'VALIDATE' && result && result.isConfirmed) {
+                    finalComment = String(result.value || '').trim();
+                }
+
+                if (apiAction === 'VALIDATE' && finalComment === '') {
+                    finalComment = 'Validation Lead GTMP.';
+                }
+
+                return {
+                    isConfirmed: !!(result && result.isConfirmed),
+                    payloadComment: finalComment
+                };
             });
         }
 
+        // Formulaire enrichi pour Demande d'infos: commentaire + délai d'expiration.
+        function promptRequestInfoDecision(defaultComment) {
+            if (!(window.Swal && typeof window.Swal.fire === 'function')) {
+                return Promise.resolve({
+                    isConfirmed: window.confirm('Confirmer la demande d\'informations ?'),
+                    payloadComment: String(defaultComment || '').trim(),
+                    reviewDelayHours: 168
+                });
+            }
+
+            var optionsHtml = [
+                '<option value="24">24 Heures</option>',
+                '<option value="48">48 Heures</option>',
+                '<option value="72">3 Jours</option>',
+                '<option value="168" selected>7 Jours (Défaut)</option>'
+            ].join('');
+
+            return window.Swal.fire({
+                title: 'Demander des informations',
+                icon: 'warning',
+                iconHtml: swalLogoIconHtml(),
+                html: '<div style="text-align:left;">'
+                    + '<label for="swal-request-comment" style="font-weight:600;margin-bottom:6px;display:block;">Commentaire</label>'
+                    + '<textarea id="swal-request-comment" class="swal2-textarea" style="display:block;margin:0;width:100%;min-height:110px;" placeholder="Précisez ce qui manque...">' + escapeHtml(defaultComment || '') + '</textarea>'
+                    + '<label for="swal-request-deadline" style="font-weight:600;margin:10px 0 6px;display:block;">Délai de réponse</label>'
+                    + '<select id="swal-request-deadline" class="swal2-select" style="display:block;margin:0;width:100%;">' + optionsHtml + '</select>'
+                    + '<div style="margin-top:10px;padding:10px;border:1px solid #fecaca;border-radius:10px;background:#fff1f2;color:#b91c1c;font-size:0.9rem;">'
+                    + '<strong>Attention :</strong> Si l\'organisation ne répond pas avant ce délai, l\'alerte sera automatiquement rejetée par le système.'
+                    + '</div>'
+                    + '</div>',
+                showCancelButton: true,
+                confirmButtonText: 'Envoyer la demande',
+                cancelButtonText: 'Annuler',
+                reverseButtons: true,
+                customClass: getSwalBootstrapClasses(),
+                buttonsStyling: false,
+                focusConfirm: false,
+                didOpen: animateSwalIcon,
+                preConfirm: function () {
+                    var commentEl = document.getElementById('swal-request-comment');
+                    var deadlineEl = document.getElementById('swal-request-deadline');
+                    var commentValue = commentEl ? String(commentEl.value || '').trim() : '';
+                    var deadlineValue = deadlineEl ? String(deadlineEl.value || '').trim() : '168';
+
+                    if (commentValue === '') {
+                        window.Swal.showValidationMessage('Veuillez saisir un commentaire pour la demande d\'informations.');
+                        return false;
+                    }
+
+                    if (['24', '48', '72', '168'].indexOf(deadlineValue) === -1) {
+                        window.Swal.showValidationMessage('Veuillez sélectionner un délai valide.');
+                        return false;
+                    }
+
+                    return {
+                        payloadComment: commentValue,
+                        reviewDelayHours: Number(deadlineValue)
+                    };
+                }
+            }).then(function (result) {
+                var value = result && result.value ? result.value : {};
+                return {
+                    isConfirmed: !!(result && result.isConfirmed),
+                    payloadComment: String(value.payloadComment || '').trim(),
+                    reviewDelayHours: Number(value.reviewDelayHours || 168)
+                };
+            });
+        }
+
+        // Routeur de décision: choisit le bon workflow popup selon l'action.
+        function soumettreDecision(apiAction, payloadComment) {
+            if (apiAction === 'REQUEST_INFO') {
+                return promptRequestInfoDecision(payloadComment);
+            }
+
+            return confirmDecision(apiAction, payloadComment);
+        }
+
+        // Restitution métier post-API: succès, warning SMTP, ou erreur bloquante.
         function showOutcome(data, apiAction) {
-            var actionTitle = actionLabels[apiAction] || 'Décision soumise';
+            var actionTitle = actionResultLabels[apiAction] || 'Décision';
             var statusText = String((data && data.status) ? data.status : 'Mis à jour');
             var mail = data && data.mail ? data.mail : { attempted: false, success: false, error: '' };
             var warningText = data && data.warning ? String(data.warning) : '';
+
+            function buildMailTroubleshooting(errorText) {
+                var err = String(errorText || '').toLowerCase();
+                var steps = [];
+
+                if (err.indexOf('phpmailer') !== -1) {
+                    steps.push('Depuis la racine SyDRA, executer: composer install');
+                    steps.push('Si besoin, executer: composer require phpmailer/phpmailer');
+                    steps.push('Verifier que vendor/autoload.php existe bien sur le serveur.');
+                }
+                if (err.indexOf('vendor/autoload.php est absent') !== -1 || err.indexOf('vendor/autoload.php') !== -1) {
+                    steps.push('Verifier les permissions de lecture du dossier vendor pour Apache/PHP.');
+                }
+                if (err.indexOf('smtp_host') !== -1 || err.indexOf('smtp_port') !== -1 || err.indexOf('smtp_user') !== -1 || err.indexOf('smtp_pass') !== -1 || err.indexOf('smtp_secure') !== -1) {
+                    steps.push('Vérifier les variables SMTP dans .env ou .env. (host, port, user, pass, secure).');
+                }
+                if (err.indexOf('connection') !== -1 || err.indexOf('timed out') !== -1) {
+                    steps.push('Tester la connectivité SMTP (port, pare-feu, DNS, accès sortant).');
+                }
+
+                if (steps.length === 0) {
+                    steps.push('Contrôler la configuration SMTP dans config/config.php.');
+                    steps.push('Lire les logs Apache/PHP pour le détail technique de l\'échec.');
+                }
+
+                return '<div class="mail-help-box">'
+                    + '<strong>Actions à tenter :</strong>'
+                    + '<ol class="mail-help-list">'
+                    + steps.map(function (s) { return '<li>' + escapeHtml(s) + '</li>'; }).join('')
+                    + '</ol>'
+                    + '</div>';
+            }
 
             function statusIconHtml(statusValue) {
                 var normalized = String(statusValue || '')
@@ -635,47 +1427,61 @@ if ($decisionSubmittedRaw !== '') {
             }
 
             if (warningText !== '') {
+                var warningDetail = String(mail && mail.error ? mail.error : '');
                 return window.Swal.fire({
                     icon: 'warning',
+                    iconHtml: swalLogoIconHtml(),
                     title: actionTitle + ' enregistrée',
                     html: '<div style="text-align:left;">'
-                        + '<p><strong>Statut:</strong> ' + statusIconHtml(statusText) + escapeHtml(statusText) + '</p>'
-                        + '<p style="margin-bottom:0;color:#b45309;">' + escapeHtml(warningText) + '</p>'
+                        + '<p style="margin-bottom:6px;"><strong>Statut :</strong> ' + statusIconHtml(statusText) + escapeHtml(statusText) + '</p>'
+                        + '<p style="margin-bottom:6px;color:#b45309;">' + escapeHtml(warningText) + '</p>'
+                        + (warningDetail !== '' ? ('<p style="margin-bottom:0;color:#7c2d12;"><strong>Détail SMTP :</strong> ' + escapeHtml(warningDetail) + '</p>') : '')
+                        + buildMailTroubleshooting(warningDetail)
                         + '</div>',
                     confirmButtonText: 'Compris',
-                    confirmButtonColor: '#d97706'
+                    customClass: getSwalBootstrapClasses(),
+                    buttonsStyling: false,
+                    didOpen: animateSwalIcon
                 });
             }
 
             if (mail.attempted && !mail.success) {
                 return window.Swal.fire({
                     icon: 'warning',
-                    title: actionTitle + ' soumis avec succès',
+                    iconHtml: swalLogoIconHtml(),
+                    title: actionTitle + ' enregistrée',
                     html: '<div style="text-align:left;">'
-                        + '<p><strong>Serveur:</strong> mise à jour effectuée en base.</p>'
-                        + '<p><strong>Email:</strong> échec d\'envoi.</p>'
-                        + '<p style="margin-bottom:0;color:#b91c1c;"><strong>Détail:</strong> ' + escapeHtml(String(mail.error || 'Erreur SMTP inconnue')) + '</p>'
+                        + '<p><strong>Serveur :</strong> mise à jour effectuée en base.</p>'
+                        + '<p><strong>Email :</strong> échec d\'envoi.</p>'
+                        + '<p style="margin-bottom:0;color:#b91c1c;"><strong>Détail SMTP :</strong> ' + escapeHtml(String(mail.error || 'Erreur SMTP inconnue')) + '</p>'
+                        + buildMailTroubleshooting(String(mail.error || ''))
                         + '</div>',
                     confirmButtonText: 'Compris',
-                    confirmButtonColor: '#005bbb'
+                    customClass: getSwalBootstrapClasses(),
+                    buttonsStyling: false,
+                    didOpen: animateSwalIcon
                 });
             }
 
             return window.Swal.fire({
                 icon: 'success',
-                title: actionTitle + ' soumis avec succès',
+                iconHtml: swalLogoIconHtml(),
+                title: actionTitle + ' enregistrée',
                 html: '<div style="text-align:left;">'
-                    + '<p><strong>Statut:</strong> ' + statusIconHtml(statusText) + escapeHtml(statusText) + '</p>'
-                    + '<p><strong>Serveur:</strong> mise à jour en base confirmée.</p>'
-                    + '<p style="margin-bottom:0;"><strong>Email:</strong> '
+                    + '<p><strong>Statut :</strong> ' + statusIconHtml(statusText) + escapeHtml(statusText) + '</p>'
+                    + '<p><strong>Serveur :</strong> mise à jour en base confirmée.</p>'
+                    + '<p style="margin-bottom:0;"><strong>Email :</strong> '
                     + (mail.attempted ? 'notification envoyée.' : 'aucun destinataire email disponible, notification in-app uniquement.')
                     + '</p>'
                     + '</div>',
                 confirmButtonText: 'Continuer',
-                confirmButtonColor: '#005bbb'
+                customClass: getSwalBootstrapClasses(),
+                buttonsStyling: false,
+                didOpen: animateSwalIcon
             });
         }
 
+        // Binding de chaque formulaire avec validation locale et timeout réseau.
         forms.forEach(function (form) {
             form.addEventListener('submit', function (event) {
                 event.preventDefault();
@@ -696,7 +1502,7 @@ if ($decisionSubmittedRaw !== '') {
                     return;
                 }
 
-                if ((apiAction === 'REQUEST_INFO' || apiAction === 'REJECT') && reason === '') {
+                if (apiAction === 'REJECT' && reason === '') {
                     window.alert('Veuillez sélectionner une raison.');
                     return;
                 }
@@ -706,9 +1512,21 @@ if ($decisionSubmittedRaw !== '') {
                     payloadComment = payloadComment ? (payloadComment + ' | ' + comment) : comment;
                 }
 
-                confirmDecision(apiAction, payloadComment).then(function (isConfirmed) {
-                    if (!isConfirmed) {
+                var reviewDelayHours = '';
+
+                var decisionPromise = soumettreDecision(apiAction, payloadComment);
+
+                decisionPromise.then(function (decisionResult) {
+                    if (!decisionResult || !decisionResult.isConfirmed) {
                         return;
+                    }
+
+                    if (typeof decisionResult.payloadComment === 'string') {
+                        payloadComment = decisionResult.payloadComment.trim();
+                    }
+
+                    if (apiAction === 'REQUEST_INFO' && Number(decisionResult.reviewDelayHours || 0) > 0) {
+                        reviewDelayHours = String(Number(decisionResult.reviewDelayHours));
                     }
 
                     var submitButton = form.querySelector('button[type="submit"]');
@@ -723,6 +1541,9 @@ if ($decisionSubmittedRaw !== '') {
                     formData.append('report_id', String(reportId));
                     formData.append('action', apiAction);
                     formData.append('comment', payloadComment);
+                    if (reviewDelayHours !== '') {
+                        formData.append('review_delay_hours', reviewDelayHours);
+                    }
 
                     var controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
                     var timeoutId = window.setTimeout(function () {
@@ -770,6 +1591,11 @@ if ($decisionSubmittedRaw !== '') {
                             }
 
                             return showOutcome(data, apiAction).then(function () {
+                                try {
+                                    window.sessionStorage.setItem('sydraSkipLoaderOnce', '1');
+                                } catch (e) {
+                                    // Ignore storage errors and continue normal reload.
+                                }
                                 window.location.reload();
                             });
                         })
@@ -781,9 +1607,13 @@ if ($decisionSubmittedRaw !== '') {
                             if (window.Swal && typeof window.Swal.fire === 'function') {
                                 window.Swal.fire({
                                     icon: 'error',
+                                    iconHtml: swalLogoIconHtml(),
                                     title: 'Problème serveur',
                                     html: '<p style="margin:0;">La décision n\'a pas été appliquée.<br><strong>Détail:</strong> ' + escapeHtml(message) + '</p>',
-                                    confirmButtonColor: '#005bbb'
+                                    customClass: getSwalBootstrapClasses(),
+                                    buttonsStyling: false,
+                                    confirmButtonText: 'Fermer',
+                                    didOpen: animateSwalIcon
                                 });
                             } else {
                                 window.alert('Impossible de traiter la décision: ' + message);
@@ -803,14 +1633,103 @@ if ($decisionSubmittedRaw !== '') {
         bindDecisionReopen();
     }
 
+    function bindAiAnalysisChat() {
+        var chatBox = document.getElementById('ai-analysis-chat');
+        var form = document.getElementById('ai-analysis-form');
+        var input = document.getElementById('ai-analysis-input');
+        var sendBtn = document.getElementById('ai-analysis-send');
+        var csrfInput = document.getElementById('ai-analysis-csrf');
+
+        if (!chatBox || !form || !input || !sendBtn || !csrfInput) {
+            return;
+        }
+
+        var csrf = String(csrfInput.value || '');
+        var reportContext = <?= $aiReportContextJson; ?>;
+        var conversation = [];
+
+        function pushBubble(role, text) {
+            var div = document.createElement('div');
+            div.className = 'ai-analysis-bubble ' + (role === 'user' ? 'user' : 'assistant');
+            div.textContent = String(text || '');
+            chatBox.appendChild(div);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function setBusy(isBusy) {
+            sendBtn.disabled = isBusy;
+            input.disabled = isBusy;
+        }
+
+        function askAnalysis(promptText) {
+            conversation.push({ role: 'user', content: promptText });
+            pushBubble('user', promptText);
+            setBusy(true);
+
+            fetch('api/ai_handler.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({
+                    action: 'analyze_report',
+                    csrf: csrf,
+                    report_context: reportContext,
+                    messages: conversation
+                })
+            })
+                .then(function (res) { return res.json(); })
+                .then(function (data) {
+                    if (!data || data.ok !== true) {
+                        throw new Error((data && data.message) ? data.message : 'Reponse IA indisponible.');
+                    }
+
+                    var reply = String(data.message || '').trim();
+                    conversation.push({ role: 'assistant', content: reply });
+                    pushBubble('assistant', reply);
+                })
+                .catch(function (error) {
+                    if (window.Swal && typeof window.Swal.fire === 'function') {
+                        window.Swal.fire({
+                            icon: 'error',
+                            title: 'Analyse IA indisponible',
+                            text: error.message || 'Impossible de contacter l\'IA.',
+                            customClass: getSwalBootstrapClasses(),
+                            buttonsStyling: false,
+                            didOpen: animateSwalIcon
+                        });
+                    }
+                })
+                .finally(function () {
+                    setBusy(false);
+                    input.focus();
+                });
+        }
+
+        form.addEventListener('submit', function (event) {
+            event.preventDefault();
+            var text = String(input.value || '').trim();
+            if (text === '') {
+                return;
+            }
+            input.value = '';
+            askAnalysis(text);
+        });
+
+        pushBubble('assistant', 'Assistant IA pret. Posez une question sur cette alerte (resume, faiblesses, proposition d\'email de correction, etc.).');
+    }
+
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function () {
             initMiniMap();
             bindDecisionForms();
+            bindAiAnalysisChat();
         });
     } else {
         initMiniMap();
         bindDecisionForms();
+        bindAiAnalysisChat();
     }
 })();
 </script>

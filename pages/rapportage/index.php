@@ -22,6 +22,12 @@ $userOrgId = (int) ($authUser['organization_id'] ?? 0);
 $userOrgName = htmlspecialchars((string) ($authUser['organization_name'] ?? 'Mon organisation'), ENT_QUOTES, 'UTF-8');
 $stats = is_array($rapportageStats ?? null) ? $rapportageStats : ['total' => 0, 'critiques' => 0, 'attente' => 0, 'valides' => 0];
 $brandLogoPath = 'assets/img/sydra-logo/BLEU-PRIMARY-SYDRA-LOGO.png';
+$currentUserId = (int) ($authUser['id'] ?? 0);
+$draftSummaryJson = json_encode($userDraftSummary ?? null, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT);
+if (!is_string($draftSummaryJson)) {
+    $draftSummaryJson = 'null';
+}
+$csrfTokenJs = htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8');
 $initialAlerts = is_array($rapportageMapAlerts ?? null) ? $rapportageMapAlerts : [];
 $initialAlertsCount = count($initialAlerts);
 $initialSeverity = ['Critique' => 0, 'Élevée' => 0, 'Moyenne' => 0, 'Faible' => 0];
@@ -75,20 +81,20 @@ if ($selectedOrgId !== '' && ctype_digit($selectedOrgId) === false) {
 
         <div class="row g-3 mb-4">
             <div class="col-lg-6">
-                <a href="?page=rapportage-creer-AI" class="hub-action-card hub-action-ai text-decoration-none">
-                    <div class="hub-action-icon"><i class="fa-solid fa-robot"></i></div>
+                <a href="?page=rapportage-creer-wizar" class="hub-action-card hub-action-ai text-decoration-none js-create-alert-link" data-check-draft="1">
+                    <div class="hub-action-icon"><i class="fa-solid fa-plus"></i></div>
                     <div>
-                        <h2>Assistant IA SyDRA</h2>
-                        <p class="mb-0">Discutez avec notre IA, elle structurera l'alerte pour vous.</p>
+                        <h2>Nouvelle alerte</h2>
+                        <p class="mb-0">Démarrer directement le formulaire Wizard sécurisé.</p>
                     </div>
                 </a>
             </div>
             <div class="col-lg-6">
-                <a href="?page=rapportage-creer-wizar" class="hub-action-card hub-action-manual text-decoration-none">
+                <a href="?page=rapportage-creer-AI" class="hub-action-card hub-action-manual text-decoration-none">
                     <div class="hub-action-icon"><i class="fa-solid fa-list-check"></i></div>
                     <div>
-                        <h2>Formulaire classique (Wizard)</h2>
-                        <p class="mb-0">Remplissez le rapport étape par étape.</p>
+                        <h2>Assistant IA (optionnel)</h2>
+                        <p class="mb-0">Option d'assistance conversationnelle complémentaire.</p>
                     </div>
                 </a>
             </div>
@@ -253,10 +259,14 @@ if ($selectedOrgId !== '' && ctype_digit($selectedOrgId) === false) {
 .kpi-loading strong { opacity: 0.4; }
 
 .hub-map { width: 100%; height: 500px; border: 1px solid #dbeafe; overflow: hidden; }
-.leaflet-popup-content-wrapper { border-radius: 12px; }
-.leaflet-popup-content { margin: 10px 12px; }
-.map-alert-title { font-weight: 700; color: #0f172a; margin-bottom: 4px; }
-.map-alert-meta { color: #475569; font-size: 12px; }
+#rapportage-hub-map .leaflet-popup-content-wrapper {
+    border-radius: 16px;
+    padding: 0;
+    box-shadow: 0 14px 28px rgba(15, 23, 42, 0.2);
+    overflow: hidden;
+}
+#rapportage-hub-map .leaflet-popup-content { margin: 0; }
+#rapportage-hub-map .leaflet-popup-tip { background: #ffffff; }
 .hub-marker {
     width: 26px;
     height: 26px;
@@ -269,28 +279,64 @@ if ($selectedOrgId !== '' && ctype_digit($selectedOrgId) === false) {
     color: #ffffff;
     font-size: 11px;
 }
-.hub-popup-card {
-    min-width: 230px;
-    border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    overflow: hidden;
-}
+.hub-popup-card { min-width: 280px; max-width: 320px; background: #ffffff; }
 .hub-popup-head {
-    background: #f8fafc;
+    padding: 10px 12px;
+    border-bottom: 1px solid #e2e8f0;
+    background: linear-gradient(130deg, #f8fbff 0%, #eef5ff 100%);
+}
+.hub-popup-title { font-size: 13px; font-weight: 800; color: #0f172a; margin: 0; }
+.hub-popup-subtitle { font-size: 11px; color: #64748b; margin-top: 2px; }
+.hub-popup-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.hub-popup-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border-radius: 999px;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+}
+.hub-popup-badge.severity-critical { background: #fee2e2; color: #b91c1c; }
+.hub-popup-badge.severity-high { background: #ffedd5; color: #c2410c; }
+.hub-popup-badge.severity-medium { background: #fef3c7; color: #a16207; }
+.hub-popup-badge.severity-low { background: #dbeafe; color: #1d4ed8; }
+.hub-popup-badge.status-approved { background: #dcfce7; color: #166534; }
+.hub-popup-badge.status-review { background: #fef3c7; color: #a16207; }
+.hub-popup-badge.status-rejected { background: #fee2e2; color: #b91c1c; }
+.hub-popup-badge.status-submitted { background: #dbeafe; color: #1d4ed8; }
+.hub-popup-badge.status-draft { background: #e2e8f0; color: #334155; }
+.hub-popup-body { padding: 10px 12px 12px; font-size: 12px; color: #334155; }
+.hub-popup-meta-row { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 5px; }
+.hub-popup-meta-label { color: #64748b; font-weight: 600; white-space: nowrap; }
+.hub-popup-meta-value { color: #0f172a; text-align: right; font-weight: 600; }
+.hub-popup-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    margin-top: 8px;
+    border-radius: 10px;
+    border: 1px solid #005BBB;
+    background: #005BBB;
+    color: #ffffff !important;
     padding: 8px 10px;
     font-size: 12px;
     font-weight: 700;
-    color: #0f172a;
-    border-bottom: 1px solid #e2e8f0;
+    text-decoration: none;
+    transition: transform .16s ease, box-shadow .16s ease, background .16s ease, border-color .16s ease;
 }
-.hub-popup-body {
-    padding: 8px 10px;
-    font-size: 12px;
-    color: #334155;
-}
-.hub-popup-body span {
-    display: block;
-    margin-bottom: 4px;
+.hub-popup-btn:hover,
+.hub-popup-btn:focus,
+.hub-popup-btn:active {
+    background: #004ea3;
+    border-color: #004ea3;
+    color: #ffffff !important;
+    box-shadow: 0 10px 18px rgba(0, 91, 187, 0.28);
+    transform: translateY(-1px);
+    text-decoration: none;
 }
 
 .hub-map-legend {
@@ -431,6 +477,10 @@ if ($selectedOrgId !== '' && ctype_digit($selectedOrgId) === false) {
     'use strict';
 
     var BRAND_LOGO_PATH = <?= json_encode($brandLogoPath, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>;
+    var CURRENT_USER_ID = <?= (int) $currentUserId; ?>;
+    var IS_DECISION_ROLE = <?= $isLeadOrAdmin ? 'true' : 'false'; ?>;
+    var USER_DRAFT_SUMMARY = <?= $draftSummaryJson; ?>;
+    var CSRF_TOKEN = '<?= $csrfTokenJs; ?>';
 
     function appBasePath() {
         var pathname = String(window.location.pathname || '/');
@@ -442,6 +492,118 @@ if ($selectedOrgId !== '' && ctype_digit($selectedOrgId) === false) {
 
     var API_ENDPOINT = appBasePath() + 'api/get_dashboard_filtered.php';
 
+    function showDeniedDetailsAccess() {
+        if (window.Swal && typeof window.Swal.fire === 'function') {
+            window.Swal.fire({
+                icon: 'warning',
+                title: 'Accès limité',
+                text: 'Vous n\'etes pas autorise a voir plus d\'informations.',
+                confirmButtonColor: '#005BBB'
+            });
+            return;
+        }
+        window.alert('Vous n\'etes pas autorise a voir plus d\'informations.');
+    }
+
+    function postDraftAction(action, extraData) {
+        var formData = new FormData();
+        formData.append('action', action);
+        formData.append('csrf', CSRF_TOKEN);
+        var payload = extraData || {};
+        Object.keys(payload).forEach(function (key) {
+            formData.append(key, String(payload[key]));
+        });
+        return fetch('?page=rapportage', {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        }).then(function (res) { return res.json(); });
+    }
+
+    function formatDraftDate(rawDate) {
+        var date = new Date(String(rawDate || '').replace(' ', 'T'));
+        if (Number.isNaN(date.getTime())) {
+            return String(rawDate || 'date inconnue');
+        }
+        return date.toLocaleString('fr-FR');
+    }
+
+    function bindDraftCollisionLinks() {
+        document.querySelectorAll('.js-create-alert-link[data-check-draft="1"]').forEach(function (link) {
+            link.addEventListener('click', function (event) {
+                event.preventDefault();
+
+                postDraftAction('check_user_draft_collision', {})
+                    .then(function (data) {
+                        if (!data || data.ok !== true || !data.has_draft || !data.draft) {
+                            window.location.href = link.getAttribute('href') || '?page=rapportage-creer-wizar';
+                            return;
+                        }
+
+                        var draft = data.draft || {};
+                        var draftId = Number(draft.id || 0);
+                        var draftIncident = String(draft.incident_type || 'Incident');
+                        var draftCreatedAt = formatDraftDate(draft.created_at || '');
+
+                        if (!(window.Swal && typeof window.Swal.fire === 'function')) {
+                            window.location.href = '?page=rapportage-creer-wizar&id_brouillon=' + draftId;
+                            return;
+                        }
+
+                        window.Swal.fire({
+                            icon: 'warning',
+                            title: 'Vous avez déjà un brouillon en cours',
+                            text: 'Vous ne pouvez avoir qu\'un seul rapport en brouillon. Veuillez terminer ou supprimer le brouillon existant intitulé "' + draftIncident + '" du ' + draftCreatedAt + '.',
+                            showCancelButton: true,
+                            showDenyButton: true,
+                            confirmButtonText: 'Continuer mon brouillon',
+                            denyButtonText: 'Supprimer l\'ancien',
+                            cancelButtonText: 'Annuler',
+                            confirmButtonColor: '#005BBB',
+                            denyButtonColor: '#dc2626'
+                        }).then(function (result) {
+                            if (result.isConfirmed) {
+                                window.location.href = '?page=rapportage-creer-wizar&id_brouillon=' + draftId;
+                                return;
+                            }
+                            if (result.isDenied) {
+                                window.Swal.fire({
+                                    icon: 'question',
+                                    title: 'Confirmation',
+                                    text: 'Attention, l\'ancien brouillon sera définitivement perdu. Continuer ?',
+                                    showCancelButton: true,
+                                    confirmButtonText: 'Oui, supprimer',
+                                    cancelButtonText: 'Annuler',
+                                    confirmButtonColor: '#dc2626'
+                                }).then(function (confirmDelete) {
+                                    if (!confirmDelete.isConfirmed) {
+                                        return;
+                                    }
+                                    postDraftAction('delete_existing_draft', { draft_id: draftId })
+                                        .then(function (deleteResult) {
+                                            if (!deleteResult || deleteResult.ok !== true) {
+                                                throw new Error((deleteResult && deleteResult.message) ? deleteResult.message : 'Suppression impossible.');
+                                            }
+                                            window.location.href = link.getAttribute('href') || '?page=rapportage-creer-wizar';
+                                        })
+                                        .catch(function (err) {
+                                            window.Swal.fire({
+                                                icon: 'error',
+                                                title: 'Suppression impossible',
+                                                text: err.message || 'Impossible de supprimer le brouillon.'
+                                            });
+                                        });
+                                });
+                            }
+                        });
+                    })
+                    .catch(function () {
+                        window.location.href = link.getAttribute('href') || '?page=rapportage-creer-wizar';
+                    });
+            });
+        });
+    }
+
     function normalize(value) {
         return String(value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
     }
@@ -452,6 +614,37 @@ if ($selectedOrgId !== '' && ctype_digit($selectedOrgId) === false) {
         if (n.indexOf('ele') >= 0) return '#f97316';
         if (n.indexOf('moy') >= 0) return '#f59e0b';
         return '#005BBB';
+    }
+
+    function severityMeta(level) {
+        var n = normalize(level);
+        if (n.indexOf('crit') >= 0) {
+            return { label: 'Critique', klass: 'severity-critical', icon: 'fa-solid fa-triangle-exclamation' };
+        }
+        if (n.indexOf('ele') >= 0 || n.indexOf('high') >= 0) {
+            return { label: 'Élevée', klass: 'severity-high', icon: 'fa-solid fa-arrow-trend-up' };
+        }
+        if (n.indexOf('moy') >= 0 || n.indexOf('medium') >= 0) {
+            return { label: 'Moyenne', klass: 'severity-medium', icon: 'fa-solid fa-chart-line' };
+        }
+        return { label: 'Faible', klass: 'severity-low', icon: 'fa-solid fa-circle-info' };
+    }
+
+    function statusMeta(status) {
+        var n = normalize(status);
+        if (n.indexOf('approuve') >= 0 || n.indexOf('valide') >= 0 || n.indexOf('publie') >= 0) {
+            return { label: 'Approuvé', klass: 'status-approved', icon: 'fa-solid fa-circle-check' };
+        }
+        if (n.indexOf('revision') >= 0 || n.indexOf('revue') >= 0 || n.indexOf('demande') >= 0) {
+            return { label: 'En revue', klass: 'status-review', icon: 'fa-solid fa-hourglass-half' };
+        }
+        if (n.indexOf('rejet') >= 0) {
+            return { label: 'Rejeté', klass: 'status-rejected', icon: 'fa-solid fa-circle-xmark' };
+        }
+        if (n.indexOf('soumis') >= 0) {
+            return { label: 'Soumis', klass: 'status-submitted', icon: 'fa-solid fa-paper-plane' };
+        }
+        return { label: 'Brouillon', klass: 'status-draft', icon: 'fa-solid fa-pen-to-square' };
     }
 
     function resolveLocationFromText(raw) {
@@ -480,6 +673,10 @@ if ($selectedOrgId !== '' && ctype_digit($selectedOrgId) === false) {
     var currentAlerts = [];
     var staticChartPayload = null;
     var staticCloudMarkers = [];
+    var hubOverviewView = {
+        center: null,
+        zoom: 7
+    };
 
     function escapeHtml(value) {
         return String(value == null ? '' : value)
@@ -547,6 +744,11 @@ if ($selectedOrgId !== '' && ctype_digit($selectedOrgId) === false) {
             var orgName = String(item.organization_name || 'Organisation inconnue');
             var dateRaw = String(item.created_at || '');
             var dateLabel = dateRaw ? dateRaw.replace('T', ' ') : 'Date non précisée';
+            var severity = severityMeta(item.urgency_level || 'Faible');
+            var status = statusMeta(item.workflow_status || 'Brouillon');
+            var locationLabel = String(item.location_text || item.locality || item.province || 'Non précisée');
+            var ownerUserId = Number(item.owner_user_id || 0);
+            var canViewDetails = IS_DECISION_ROLE || (ownerUserId > 0 && ownerUserId === CURRENT_USER_ID);
 
             var icon = window.L.divIcon({
                 className: 'hub-div-icon',
@@ -560,15 +762,49 @@ if ($selectedOrgId !== '' && ctype_digit($selectedOrgId) === false) {
 
             marker.bindPopup(
                 '<div class="hub-popup-card">'
-                + '<div class="hub-popup-head">' + typeLabel + '</div>'
+                + '<div class="hub-popup-head">'
+                + '<p class="hub-popup-title">Incident #' + reportId + ' - ' + escapeHtml(typeLabel) + '</p>'
+                + '<div class="hub-popup-subtitle">' + escapeHtml(orgName) + '</div>'
+                + '<div class="hub-popup-badges">'
+                + '<span class="hub-popup-badge ' + severity.klass + '"><i class="' + severity.icon + '"></i>' + severity.label + '</span>'
+                + '<span class="hub-popup-badge ' + status.klass + '"><i class="' + status.icon + '"></i>' + status.label + '</span>'
+                + '</div>'
+                + '</div>'
                 + '<div class="hub-popup-body">'
-                + '<span><strong>Date:</strong> ' + dateLabel + '</span>'
-                + '<span><strong>Organisation:</strong> ' + orgName + '</span>'
-                + '<span><strong>Localisation:</strong> ' + String(item.location_text || item.locality || item.province || 'Non précisée') + '</span>'
-                + '<a class="btn btn-sm btn-primary mt-1" href="?page=rapportage-voir&id=' + reportId + '">Voir l\'alerte</a>'
+                + '<div class="hub-popup-meta-row"><span class="hub-popup-meta-label">Date</span><span class="hub-popup-meta-value">' + escapeHtml(dateLabel) + '</span></div>'
+                + '<div class="hub-popup-meta-row"><span class="hub-popup-meta-label">Localisation</span><span class="hub-popup-meta-value">' + escapeHtml(locationLabel) + '</span></div>'
+                + '<a class="hub-popup-btn js-guard-report-access" data-can-view-details="' + (canViewDetails ? '1' : '0') + '" href="?page=rapportage-voir&id=' + reportId + '"><i class="fa-solid fa-eye"></i>Consulter l\'incident</a>'
                 + '</div>'
-                + '</div>'
+                + '</div>',
+                {
+                    autoPan: true,
+                    autoPanPaddingTopLeft: [18, 90],
+                    autoPanPaddingBottomRight: [18, 24],
+                    keepInView: true
+                }
             );
+
+            marker.on('click', function () {
+                if (!hubMap) {
+                    return;
+                }
+                hubMap._sydraOpeningPopup = true;
+                window.setTimeout(function () {
+                    if (hubMap) {
+                        hubMap._sydraOpeningPopup = false;
+                    }
+                }, 650);
+
+                var flyZoom = 10;
+                if (typeof hubMap.getMaxZoom === 'function') {
+                    flyZoom = Math.min(flyZoom, Number(hubMap.getMaxZoom() || flyZoom));
+                }
+
+                hubMap.flyTo(marker.getLatLng(), flyZoom, {
+                    animate: true,
+                    duration: 0.5
+                });
+            });
 
             markersLayer.addLayer(marker);
             added.push(coords);
@@ -580,6 +816,16 @@ if ($selectedOrgId !== '' && ctype_digit($selectedOrgId) === false) {
         if (added.length > 0 && hubMap) {
             var bounds = window.L.latLngBounds(added);
             hubMap.fitBounds(bounds.pad(0.18));
+            hubOverviewView = {
+                center: hubMap.getCenter(),
+                zoom: hubMap.getZoom()
+            };
+        } else if (hubMap) {
+            hubMap.setView([-3.0, 27.5], 7);
+            hubOverviewView = {
+                center: hubMap.getCenter(),
+                zoom: hubMap.getZoom()
+            };
         }
     }
 
@@ -620,6 +866,27 @@ if ($selectedOrgId !== '' && ctype_digit($selectedOrgId) === false) {
             zoomControl: true
         });
         hubMap.setView([-3.0, 27.5], 7);
+        hubOverviewView = {
+            center: hubMap.getCenter(),
+            zoom: hubMap.getZoom()
+        };
+        hubMap._sydraOpeningPopup = false;
+
+        hubMap.on('popupclose', function () {
+            if (hubMap._sydraOpeningPopup || !hubOverviewView.center) {
+                return;
+            }
+
+            var targetCenter = hubOverviewView.center;
+            var targetZoom = hubOverviewView.zoom;
+
+            if (targetCenter && typeof targetZoom === 'number') {
+                hubMap.flyTo(targetCenter, targetZoom, {
+                    animate: true,
+                    duration: 0.45
+                });
+            }
+        });
 
         window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; OpenStreetMap contributors'
@@ -1250,10 +1517,65 @@ if ($selectedOrgId !== '' && ctype_digit($selectedOrgId) === false) {
         }
     }
 
+    function bindRestrictedDetailLinks() {
+        document.addEventListener('click', function (event) {
+            var target = event.target;
+            if (!(target instanceof Element)) {
+                return;
+            }
+            var link = target.closest('a.js-guard-report-access[data-can-view-details]');
+            if (!link) {
+                return;
+            }
+            if (String(link.getAttribute('data-can-view-details') || '0') === '1') {
+                return;
+            }
+            event.preventDefault();
+            showDeniedDetailsAccess();
+        });
+    }
+
+    function remindDraftIfNeeded() {
+        if (IS_DECISION_ROLE || !USER_DRAFT_SUMMARY || !USER_DRAFT_SUMMARY.id) {
+            return;
+        }
+        if (!(window.Swal && typeof window.Swal.fire === 'function')) {
+            return;
+        }
+
+        var reminderKey = 'sydraDraftReminderShown';
+        try {
+            if (window.sessionStorage.getItem(reminderKey) === '1') {
+                return;
+            }
+            window.sessionStorage.setItem(reminderKey, '1');
+        } catch (e) {
+            // stockage indisponible: on continue sans blocage
+        }
+
+        window.Swal.fire({
+            icon: 'info',
+            title: 'Brouillon en attente',
+            text: 'Vous avez un rapportage en brouillon non soumis. Voulez-vous le continuer maintenant ?',
+            showCancelButton: true,
+            confirmButtonText: 'Oui',
+            cancelButtonText: 'Plus tard',
+            confirmButtonColor: '#005BBB',
+            toast: false
+        }).then(function (result) {
+            if (result.isConfirmed) {
+                window.location.href = '?page=rapportage-creer-wizar&id_brouillon=' + Number(USER_DRAFT_SUMMARY.id || 0);
+            }
+        });
+    }
+
     function boot() {
         initMap();
         initCharts();
         bindFilterForm();
+        bindDraftCollisionLinks();
+        bindRestrictedDetailLinks();
+        remindDraftIfNeeded();
 
         var initialCharts = staticChartPayload || { trend: { labels: ['Global'], values: [0] }, severity: { labels: ['Faible'], values: [0] } };
         var initialMarkers = staticCloudMarkers || [];

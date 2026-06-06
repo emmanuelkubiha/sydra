@@ -5,6 +5,7 @@
 - Version courante: `v0.9.0`
 - Derniere mise a jour: `2026-06-06`
 - Canal: `main`
+- Historique complet des versions: voir `CHANGELOG.md`
 
 Historique rapide:
 

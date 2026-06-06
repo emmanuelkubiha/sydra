@@ -287,6 +287,18 @@ if (!function_exists('can_manage_users')) {
     }
 }
 
+if (!function_exists('can_access_settings_page')) {
+    function can_access_settings_page(?array $user): bool
+    {
+        if (!is_array($user)) {
+            return false;
+        }
+
+        $role = strtoupper((string) ($user['role'] ?? ''));
+        return in_array($role, ['ADMIN', 'GTMP_LEAD', 'LEAD_GTMP', 'GTMP_COLEAD'], true);
+    }
+}
+
 if (!function_exists('is_report_mutable_status')) {
     function is_report_mutable_status(string $status): bool
     {
@@ -610,6 +622,22 @@ if (!function_exists('report_workflow_status_expr')) {
         }
 
         return '"Soumis"';
+    }
+}
+
+if (!function_exists('normalize_workflow_status')) {
+    function normalize_workflow_status(string $status): string
+    {
+        $lower = strtolower(trim($status));
+        return str_replace(['é', 'è', 'ê'], 'e', $lower);
+    }
+}
+
+if (!function_exists('is_published_or_validated_status')) {
+    function is_published_or_validated_status(string $status): bool
+    {
+        $normalized = normalize_workflow_status($status);
+        return in_array($normalized, ['publie', 'published', 'approuve', 'approved', 'valide', 'validee'], true);
     }
 }
 
@@ -1299,6 +1327,20 @@ if ($method === 'POST') {
         $siteWeb = trim((string) ($_POST['site_web'] ?? ''));
         $organizationName = trim((string) ($_POST['organization_name'] ?? ''));
         $bio = trim((string) ($_POST['bio_organisation'] ?? $_POST['bio'] ?? ''));
+        $existingPhone = trim((string) ($authUser['telephone_organisation'] ?? $authUser['phone'] ?? ''));
+        $existingBio = trim((string) ($authUser['bio_organisation'] ?? $authUser['bio'] ?? ''));
+        $existingOrganizationName = trim((string) ($authUser['organization_name'] ?? ''));
+
+        // Evite de laisser organization_name vide pour les comptes reporteurs.
+        if ($organizationName === '' && $fullName !== '') {
+            $organizationName = $fullName;
+        }
+
+        $effectiveOrganizationName = $organizationName !== ''
+            ? $organizationName
+            : ($existingOrganizationName !== '' ? $existingOrganizationName : $fullName);
+        $effectivePhone = $phone !== '' ? $phone : $existingPhone;
+        $effectiveBio = $bio !== '' ? $bio : $existingBio;
 
         if ($siteWeb !== '' && !preg_match('#^https?://#i', $siteWeb)) {
             $siteWeb = 'https://' . $siteWeb;
@@ -1318,8 +1360,8 @@ if ($method === 'POST') {
 
         $needsMandatoryCompletion = requires_profile_completion($authUser)
             || (isset($_GET['must_complete_profile']) && (string) $_GET['must_complete_profile'] === '1');
-        if ($needsMandatoryCompletion && ($phone === '' || $bio === '')) {
-            set_flash('error', 'Téléphone organisation et biographie sont obligatoires pour terminer la première configuration.');
+        if ($needsMandatoryCompletion && ($effectiveOrganizationName === '' || $effectivePhone === '' || $effectiveBio === '')) {
+            set_flash('error', 'Nom organisation, téléphone et biographie sont obligatoires pour terminer la première configuration.');
             header('Location: ?page=profil&must_complete_profile=1');
             exit;
         }
@@ -1385,16 +1427,23 @@ if ($method === 'POST') {
             'full_name' => $fullName,
             'avatar_path' => $avatarPath !== '' ? $avatarPath : null,
             'logo_path' => $avatarPath !== '' ? $avatarPath : null,
-            'phone' => $phone !== '' ? $phone : null,
-            'telephone_organisation' => $phone !== '' ? $phone : null,
+            'phone' => $effectivePhone !== '' ? $effectivePhone : null,
+            'telephone_organisation' => $effectivePhone !== '' ? $effectivePhone : null,
             'site_web' => $siteWeb !== '' ? $siteWeb : null,
-            'organization_name' => $organizationName !== '' ? $organizationName : null,
-            'bio' => $bio !== '' ? $bio : null,
-            'bio_organisation' => $bio !== '' ? $bio : null,
+            'organization_name' => $effectiveOrganizationName !== '' ? $effectiveOrganizationName : null,
+            'bio' => $effectiveBio !== '' ? $effectiveBio : null,
+            'bio_organisation' => $effectiveBio !== '' ? $effectiveBio : null,
             'id' => (int) $authUser['id'],
         ]);
 
-        set_flash('success', 'Profil mis à jour.');
+        $isNowComplete = ($effectiveOrganizationName !== '' && $effectivePhone !== '' && $effectiveBio !== '');
+        if ($needsMandatoryCompletion && $isNowComplete) {
+            set_flash('success', 'Votre profil a ete mis a jour, felicitations. Vous pouvez maintenant explorer SyDRA, bienvenue.');
+            header('Location: ?page=tableau_de_bord');
+            exit;
+        }
+
+        set_flash('success', 'Profil mis a jour.');
         header('Location: ?page=profil');
         exit;
     }
@@ -1659,6 +1708,13 @@ if ($method === 'POST') {
             . '</div></div></body></html>';
 
         $mailResult = sendAppMailDetailed($config, $newEmail, 'Confirmez votre nouvelle adresse email SyDRA', $html, true);
+        $_SESSION['email_change_popup'] = [
+            'show' => true,
+            'recipient' => $newEmail,
+            'success' => (bool) ($mailResult['success'] ?? false),
+            'error' => (string) ($mailResult['error'] ?? ''),
+            'expires_hours' => $expiresHours,
+        ];
         if ((bool) ($mailResult['success'] ?? false)) {
             set_flash('success', 'Un email de confirmation a été envoyé à la nouvelle adresse.');
         } else {
@@ -1687,12 +1743,6 @@ if ($method === 'POST') {
         $phone = trim((string) ($_POST['telephone_organisation'] ?? ''));
         $siteWeb = trim((string) ($_POST['site_web'] ?? ''));
         $bio = trim((string) ($_POST['bio_organisation'] ?? ''));
-        $newEmail = strtolower(trim((string) ($_POST['new_email'] ?? '')));
-        $expiresHours = (int) ($_POST['expires_hours'] ?? 48);
-        if (!in_array($expiresHours, [24, 48], true)) {
-            $expiresHours = 48;
-        }
-
         if ($targetUserId <= 0 || $fullName === '' || $organizationName === '') {
             set_flash('error', 'Acronyme, nom organisation et utilisateur cible sont obligatoires.');
             header('Location: ?page=utilisateurs');
@@ -1708,7 +1758,11 @@ if ($method === 'POST') {
             exit;
         }
 
-        $targetStmt = $pdo->prepare('SELECT id, full_name, email, role, role_id FROM users WHERE id = :id LIMIT 1');
+        $roleMode = role_storage_mode($config);
+        $targetSql = $roleMode === 'role_fk'
+            ? 'SELECT id, full_name, email, role_id FROM users WHERE id = :id LIMIT 1'
+            : 'SELECT id, full_name, email, role FROM users WHERE id = :id LIMIT 1';
+        $targetStmt = $pdo->prepare($targetSql);
         $targetStmt->execute(['id' => $targetUserId]);
         $target = $targetStmt->fetch();
         if (!is_array($target)) {
@@ -1724,11 +1778,24 @@ if ($method === 'POST') {
         }
 
         $allowedRoles = detect_user_roles($config);
-        if (!in_array($role, $allowedRoles, true)) {
-            $role = strtoupper((string) ($target['role'] ?? 'REPORTER'));
+        $currentRoleCode = 'REPORTER';
+        if ($roleMode === 'role_fk') {
+            $currentRoleStmt = $pdo->prepare('SELECT COALESCE(r.code, "REPORTER")
+                                              FROM users u
+                                              LEFT JOIN roles r ON r.id = u.role_id
+                                              WHERE u.id = :id
+                                              LIMIT 1');
+            $currentRoleStmt->execute(['id' => $targetUserId]);
+            $currentRoleCode = strtoupper((string) ($currentRoleStmt->fetchColumn() ?: 'REPORTER'));
+        } else {
+            $currentRoleCode = strtoupper((string) ($target['role'] ?? 'REPORTER'));
         }
 
-        if (role_storage_mode($config) === 'role_fk') {
+        if (!in_array($role, $allowedRoles, true)) {
+            $role = $currentRoleCode;
+        }
+
+        if ($roleMode === 'role_fk') {
             $roleId = resolve_role_id($config, $role);
             if ($roleId === null) {
                 set_flash('error', 'Rôle introuvable dans la table roles.');
@@ -1788,73 +1855,16 @@ if ($method === 'POST') {
             ]);
         }
 
-        $mailMessage = '';
-        if ($newEmail !== '') {
-            if (!filter_var($newEmail, FILTER_VALIDATE_EMAIL)) {
-                set_flash('error', 'Nouvelle adresse email invalide.');
-                header('Location: ?page=utilisateurs');
-                exit;
-            }
+        $userEditPopup = [
+            'show' => true,
+            'mail_attempted' => false,
+            'mail_success' => null,
+            'recipient' => '',
+            'error' => '',
+        ];
 
-            $currentEmail = strtolower(trim((string) ($target['email'] ?? '')));
-            if ($newEmail !== $currentEmail) {
-                $existsStmt = $pdo->prepare('SELECT id FROM users WHERE email = :email LIMIT 1');
-                $existsStmt->execute(['email' => $newEmail]);
-                if (is_array($existsStmt->fetch())) {
-                    set_flash('error', 'Cette adresse email est déjà utilisée par un autre compte.');
-                    header('Location: ?page=utilisateurs');
-                    exit;
-                }
-
-                $token = bin2hex(random_bytes(32));
-                $tokenHash = hash('sha256', $token);
-                $expiresAt = date('Y-m-d H:i:s', time() + ($expiresHours * 3600));
-
-                $cleanupStmt = $pdo->prepare('DELETE FROM email_change_requests WHERE user_id = :user_id AND used_at IS NULL');
-                $cleanupStmt->execute(['user_id' => $targetUserId]);
-
-                $insertStmt = $pdo->prepare('INSERT INTO email_change_requests (
-                    user_id, requested_by, old_email, new_email, token_hash, expires_at
-                ) VALUES (
-                    :user_id, :requested_by, :old_email, :new_email, :token_hash, :expires_at
-                )');
-                $insertStmt->execute([
-                    'user_id' => $targetUserId,
-                    'requested_by' => (int) ($authUser['id'] ?? 0),
-                    'old_email' => $currentEmail,
-                    'new_email' => $newEmail,
-                    'token_hash' => $tokenHash,
-                    'expires_at' => $expiresAt,
-                ]);
-
-                $appUrl = rtrim((string) ($config['app_url'] ?? ''), '/');
-                $confirmUrl = $appUrl . '/?page=confirmer_email&token=' . urlencode($token);
-                $targetName = (string) ($target['full_name'] ?? 'utilisateur');
-
-                $html = '<!doctype html><html><body style="margin:0;background:#eef2f7;font-family:Arial,sans-serif;color:#1f2a37;">'
-                    . '<div style="max-width:760px;margin:22px auto;background:#ffffff;border:1px solid #d7e2f0;border-radius:12px;overflow:hidden;">'
-                    . '<div style="background:#005bbb;color:#fff;padding:16px 22px;"><h2 style="margin:0;font-size:20px;">Confirmation de votre nouvelle adresse email</h2></div>'
-                    . '<div style="padding:20px 22px;">'
-                    . '<p>Bonjour ' . htmlspecialchars($targetName, ENT_QUOTES, 'UTF-8') . ',</p>'
-                    . '<p>Une demande de changement d adresse email a été initiée pour votre compte SyDRA.</p>'
-                    . '<p>Nouvelle adresse demandée: <strong>' . htmlspecialchars($newEmail, ENT_QUOTES, 'UTF-8') . '</strong></p>'
-                    . '<p style="margin:20px 0 8px;">'
-                    . '<a href="' . htmlspecialchars($confirmUrl, ENT_QUOTES, 'UTF-8') . '" style="display:inline-block;background:#005bbb;color:#fff;text-decoration:none;font-weight:700;padding:12px 18px;border-radius:8px;">Confirmer ma nouvelle adresse</a>'
-                    . '</p>'
-                    . '<p style="font-size:12px;color:#475569;">Ce lien expire dans ' . (int) $expiresHours . ' heures. Si vous n êtes pas à l origine de cette demande, ignorez ce message.</p>'
-                    . '</div></div></body></html>';
-
-                $mailResult = sendAppMailDetailed($config, $newEmail, 'Confirmez votre nouvelle adresse email SyDRA', $html, true);
-                if ((bool) ($mailResult['success'] ?? false)) {
-                    $mailMessage = ' Un email de confirmation (' . (int) $expiresHours . 'h) a été envoyé à la nouvelle adresse.';
-                } else {
-                    $errorMsg = trim((string) ($mailResult['error'] ?? 'Erreur inconnue.'));
-                    $mailMessage = ' Demande email enregistrée, mais envoi SMTP en échec: ' . $errorMsg;
-                }
-            }
-        }
-
-        set_flash('success', 'Utilisateur mis à jour.' . $mailMessage);
+        $_SESSION['user_edit_popup'] = $userEditPopup;
+        set_flash('success', 'Utilisateur mis à jour.');
         header('Location: ?page=utilisateurs');
         exit;
     }
@@ -2214,6 +2224,118 @@ if ($method === 'POST') {
         exit;
     }
 
+    if ($action === 'check_user_draft_collision') {
+        require_auth($authUser);
+
+        header('Content-Type: application/json; charset=UTF-8');
+
+        $reportUserFk = reports_user_fk_column($config);
+        if ($reportUserFk === null) {
+            echo json_encode(['ok' => false, 'message' => 'Colonne utilisateur introuvable dans reports.']);
+            exit;
+        }
+
+        $hasIncidentType = has_table_column($config, 'reports', 'incident_type');
+        $hasIncidentLabel = has_table_column($config, 'reports', 'incident_label');
+        $hasTitle = has_table_column($config, 'reports', 'title');
+        $incidentExpr = $hasIncidentType
+            ? 'NULLIF(TRIM(r.incident_type), "")'
+            : ($hasIncidentLabel
+                ? 'NULLIF(TRIM(r.incident_label), "")'
+                : ($hasTitle ? 'NULLIF(TRIM(r.title), "")' : 'NULL'));
+
+        $statusExpr = report_workflow_status_expr($config, 'r');
+        $statusNormExpr = 'LOWER(REPLACE(REPLACE(REPLACE(' . $statusExpr . ', "é", "e"), "è", "e"), "ê", "e"))';
+
+        $draftStmt = $pdo->prepare('SELECT r.id,
+                                           COALESCE(' . $incidentExpr . ', "Incident") AS incident_type,
+                                           r.created_at
+                                    FROM reports r
+                                    WHERE r.' . $reportUserFk . ' = :user_id
+                                      AND ' . $statusNormExpr . ' = "brouillon"
+                                    ORDER BY r.created_at DESC
+                                    LIMIT 1');
+        $draftStmt->execute(['user_id' => (int) ($authUser['id'] ?? 0)]);
+        $draft = $draftStmt->fetch();
+
+        if (!is_array($draft)) {
+            echo json_encode([
+                'ok' => true,
+                'has_draft' => false,
+            ]);
+            exit;
+        }
+
+        echo json_encode([
+            'ok' => true,
+            'has_draft' => true,
+            'draft' => [
+                'id' => (int) ($draft['id'] ?? 0),
+                'incident_type' => (string) ($draft['incident_type'] ?? 'Incident'),
+                'created_at' => (string) ($draft['created_at'] ?? ''),
+            ],
+        ]);
+        exit;
+    }
+
+    if ($action === 'delete_existing_draft') {
+        require_auth($authUser);
+
+        header('Content-Type: application/json; charset=UTF-8');
+
+        $reportUserFk = reports_user_fk_column($config);
+        if ($reportUserFk === null) {
+            echo json_encode(['ok' => false, 'message' => 'Colonne utilisateur introuvable dans reports.']);
+            exit;
+        }
+
+        $statusExpr = report_workflow_status_expr($config, 'r');
+        $statusNormExpr = 'LOWER(REPLACE(REPLACE(REPLACE(' . $statusExpr . ', "é", "e"), "è", "e"), "ê", "e"))';
+
+        $draftId = (int) ($_POST['draft_id'] ?? 0);
+        if ($draftId <= 0) {
+            echo json_encode(['ok' => false, 'message' => 'Brouillon invalide.']);
+            exit;
+        }
+
+        $checkStmt = $pdo->prepare('SELECT r.id
+                                    FROM reports r
+                                    WHERE r.id = :id
+                                      AND r.' . $reportUserFk . ' = :user_id
+                                      AND ' . $statusNormExpr . ' = "brouillon"
+                                    LIMIT 1');
+        $checkStmt->execute([
+            'id' => $draftId,
+            'user_id' => (int) ($authUser['id'] ?? 0),
+        ]);
+
+        if (!is_array($checkStmt->fetch())) {
+            echo json_encode(['ok' => false, 'message' => 'Brouillon introuvable ou non autorisé.']);
+            exit;
+        }
+
+        $attachmentsStmt = $pdo->prepare('SELECT storage_path FROM report_attachments WHERE report_id = :report_id');
+        $attachmentsStmt->execute(['report_id' => $draftId]);
+        $attachments = $attachmentsStmt->fetchAll();
+
+        $deleteStmt = $pdo->prepare('DELETE FROM reports WHERE id = :id LIMIT 1');
+        $deleteStmt->execute(['id' => $draftId]);
+
+        foreach ($attachments as $attachment) {
+            $storedPath = trim((string) ($attachment['storage_path'] ?? ''));
+            if ($storedPath === '') {
+                continue;
+            }
+            $fullPath = __DIR__ . '/' . ltrim($storedPath, '/');
+            if (is_file($fullPath)) {
+                @unlink($fullPath);
+            }
+        }
+
+        echo json_encode(['ok' => true]);
+        exit;
+    }
+
     if ($action === 'lead_report_decision') {
         require_auth($authUser);
         if (!is_lead_gtmp($authUser) && !is_admin($authUser)) {
@@ -2497,6 +2619,7 @@ $pageMap = [
     'rapports_liste' => ['file' => __DIR__ . '/pages/reports_list.php', 'title' => 'Rapports'],
     'profil' => ['file' => __DIR__ . '/pages/profile.php', 'title' => 'Profil'],
     'utilisateurs' => ['file' => __DIR__ . '/pages/users.php', 'title' => 'Utilisateurs'],
+    'parametres' => ['file' => __DIR__ . '/pages/admin/parametres.php', 'title' => 'Parametres & Configuration'],
     'activation_compte' => ['file' => __DIR__ . '/pages/activate.php', 'title' => 'Activation de compte'],
     'reinitialiser_mot_de_passe' => ['file' => __DIR__ . '/pages/reset_password.php', 'title' => 'Reinitialiser le mot de passe'],
     'confirmer_email' => ['file' => __DIR__ . '/pages/confirm_email_change.php', 'title' => 'Confirmer le changement email'],
@@ -2516,6 +2639,12 @@ if ($page === 'utilisateurs' && !can_manage_users($authUser)) {
 }
 
 if ($page === 'rapportage-admin-list' && !is_lead_gtmp($authUser) && !is_admin($authUser)) {
+    http_response_code(403);
+    echo 'Accès interdit.';
+    exit;
+}
+
+if ($page === 'parametres' && !can_access_settings_page($authUser)) {
     http_response_code(403);
     echo 'Accès interdit.';
     exit;
@@ -2547,7 +2676,88 @@ $dashboardKpis = [];
 $dashboardRecentActivities = [];
 $dashboardRecentReports = [];
 $dashboardMapAlerts = [];
+$userDraftSummary = null;
+$wizardDraftData = null;
+$wizardDraftId = 0;
 $pdo = db($config);
+
+if (is_array($authUser)) {
+    $reportUserFkForDraft = reports_user_fk_column($config);
+    if ($reportUserFkForDraft !== null) {
+        $statusExprForDraft = report_workflow_status_expr($config, 'r');
+        $statusNormExprForDraft = 'LOWER(REPLACE(REPLACE(REPLACE(' . $statusExprForDraft . ', "é", "e"), "è", "e"), "ê", "e"))';
+        $hasIncidentTypeForDraft = has_table_column($config, 'reports', 'incident_type');
+        $hasIncidentLabelForDraft = has_table_column($config, 'reports', 'incident_label');
+        $hasTitleForDraft = has_table_column($config, 'reports', 'title');
+        $incidentExprForDraft = $hasIncidentTypeForDraft
+            ? 'NULLIF(TRIM(r.incident_type), "")'
+            : ($hasIncidentLabelForDraft
+                ? 'NULLIF(TRIM(r.incident_label), "")'
+                : ($hasTitleForDraft ? 'NULLIF(TRIM(r.title), "")' : 'NULL'));
+
+        $draftSummaryStmt = $pdo->prepare('SELECT r.id,
+                                                  COALESCE(' . $incidentExprForDraft . ', "Incident") AS incident_type,
+                                                  r.created_at
+                                           FROM reports r
+                                           WHERE r.' . $reportUserFkForDraft . ' = :user_id
+                                             AND ' . $statusNormExprForDraft . ' = "brouillon"
+                                           ORDER BY r.created_at DESC
+                                           LIMIT 1');
+        $draftSummaryStmt->execute(['user_id' => (int) ($authUser['id'] ?? 0)]);
+        $draftSummary = $draftSummaryStmt->fetch();
+        if (is_array($draftSummary)) {
+            $userDraftSummary = [
+                'id' => (int) ($draftSummary['id'] ?? 0),
+                'incident_type' => (string) ($draftSummary['incident_type'] ?? 'Incident'),
+                'created_at' => (string) ($draftSummary['created_at'] ?? ''),
+            ];
+        }
+    }
+}
+
+if ($page === 'rapportage-creer-wizar' && is_array($authUser)) {
+    $reportUserFkForWizard = reports_user_fk_column($config);
+    $requestedDraftId = (int) ($_GET['id_brouillon'] ?? $_GET['report_id'] ?? 0);
+
+    if ($reportUserFkForWizard !== null && $requestedDraftId <= 0 && is_array($userDraftSummary)) {
+        $requestedDraftId = (int) ($userDraftSummary['id'] ?? 0);
+    }
+
+    if ($reportUserFkForWizard !== null && $requestedDraftId > 0) {
+        $statusExprForWizard = report_workflow_status_expr($config, 'r');
+        $statusNormExprForWizard = 'LOWER(REPLACE(REPLACE(REPLACE(' . $statusExprForWizard . ', "é", "e"), "è", "e"), "ê", "e"))';
+        $wizardStmt = $pdo->prepare('SELECT r.id,
+                                            COALESCE(r.province, "") AS province,
+                                            COALESCE(r.territory, "") AS territory,
+                                            COALESCE(r.health_zone, "") AS health_zone,
+                                            COALESCE(r.groupement, "") AS groupement,
+                                            COALESCE(r.village, "") AS village,
+                                            r.gps_lat,
+                                            r.gps_lng,
+                                            COALESCE(NULLIF(TRIM(r.incident_type), ""), NULLIF(TRIM(r.incident_label), ""), "") AS incident_type,
+                                            COALESCE(r.urgency_level, "Moyenne") AS urgency_level,
+                                            COALESCE(r.victims_count, 0) AS victims_count,
+                                            COALESCE(r.displaced_households, 0) AS displaced_households,
+                                            COALESCE(r.content, "") AS description,
+                                            COALESCE(r.analysis_text, "") AS analyse,
+                                            COALESCE(r.priority_needs_text, "") AS priority_needs,
+                                            COALESCE(r.recommendations_text, "") AS recommandations
+                                     FROM reports r
+                                     WHERE r.id = :id
+                                       AND r.' . $reportUserFkForWizard . ' = :user_id
+                                       AND ' . $statusNormExprForWizard . ' = "brouillon"
+                                     LIMIT 1');
+        $wizardStmt->execute([
+            'id' => $requestedDraftId,
+            'user_id' => (int) ($authUser['id'] ?? 0),
+        ]);
+        $wizardDraft = $wizardStmt->fetch();
+        if (is_array($wizardDraft)) {
+            $wizardDraftId = (int) ($wizardDraft['id'] ?? 0);
+            $wizardDraftData = $wizardDraft;
+        }
+    }
+}
 
 if ($page === 'rapports_liste') {
     $reportUserFk = reports_user_fk_column($config);
@@ -2702,8 +2912,11 @@ if ($page === 'rapportage' || $page === 'rapportage-liste-user' || $page === 'ra
             }
         }
 
-        if (!$isLeadOrAdmin && $reportUserFk !== null) {
-            $commonConditions[] = 'r.' . $reportUserFk . ' = :reporter_uid';
+        if ($isLeadOrAdmin) {
+            $commonConditions[] = $statusNormalizedExpr . ' <> "brouillon"';
+        } elseif ($reportUserFk !== null) {
+            $commonConditions[] = '(r.' . $reportUserFk . ' = :reporter_uid OR '
+                . $statusNormalizedExpr . ' IN ("publie", "published", "approuve", "approved", "valide", "validee"))';
             $commonParams['reporter_uid'] = (int) ($authUser['id'] ?? 0);
         }
 
@@ -2717,6 +2930,7 @@ if ($page === 'rapportage' || $page === 'rapportage-liste-user' || $page === 'ra
                           ' . $gpsLatExpr . ' AS gps_lat,
                           ' . $gpsLngExpr . ' AS gps_lng,
                           ' . $orgExpr . ' AS organization_name,
+                     ' . $userExpr . ' AS owner_user_id,
                           ' . $statusExpr . ' AS workflow_status,
                           r.created_at
                    FROM reports r
@@ -2818,10 +3032,10 @@ if ($page === 'rapportage' || $page === 'rapportage-liste-user' || $page === 'ra
                                               ' . $orgExprList . ' AS organization_name
                                        FROM reports r
                                        ' . $joinUserSqlList . '
-                                       WHERE (' . $statusNormalizedExpr . ' <> "brouillon" OR ' . $ownerExprList . ' = :current_user_id)
+                                       WHERE ' . $statusNormalizedExpr . ' <> "brouillon"
                                        ORDER BY r.created_at DESC
                                        LIMIT 800');
-            $userStmt->execute(['current_user_id' => (int) ($authUser['id'] ?? 0)]);
+            $userStmt->execute();
             $rapportageUserReports = $userStmt->fetchAll();
         } elseif ($reportUserFk !== null) {
             $userStmt = $pdo->prepare('SELECT r.id,
@@ -2854,10 +3068,10 @@ if ($page === 'rapportage' || $page === 'rapportage-liste-user' || $page === 'ra
                                            ' . $orgExpr . ' AS organization_name
                                     FROM reports r
                                     ' . $joinUserSql . '
-                                    WHERE (' . $statusNormalizedExpr . ' <> "brouillon" OR ' . $userExpr . ' = :current_user_id)
+                                    WHERE ' . $statusNormalizedExpr . ' <> "brouillon"
                                     ORDER BY r.created_at DESC
                                     LIMIT 800');
-        $adminStmt->execute(['current_user_id' => (int) ($authUser['id'] ?? 0)]);
+        $adminStmt->execute();
         $rapportageAdminReports = $adminStmt->fetchAll();
 
         $latestSubmittedStmt = $pdo->query('SELECT r.id
@@ -2939,7 +3153,11 @@ if ($page === 'rapportage' || $page === 'rapportage-liste-user' || $page === 'ra
         $attachmentsStmt->execute(['report_id' => $reportId]);
         $rapportageAttachments = $attachmentsStmt->fetchAll();
 
+        $hasHistoryActionColumn = has_table_column($config, 'report_status_history', 'action');
+        $actionExpr = $hasHistoryActionColumn ? 'h.action' : '""';
+
         $timelineStmt = $pdo->prepare('SELECT h.id, h.status_label, h.event_note, h.created_at,
+                                              ' . $actionExpr . ' AS action,
                                               COALESCE(NULLIF(TRIM(u.organization_name), ""), u.full_name, "Système") AS actor_name
                                        FROM report_status_history h
                                        LEFT JOIN users u ON u.id = h.changed_by
@@ -2948,25 +3166,116 @@ if ($page === 'rapportage' || $page === 'rapportage-liste-user' || $page === 'ra
         $timelineStmt->execute(['report_id' => $reportId]);
         $rapportageTimeline = $timelineStmt->fetchAll();
 
+        $submissionEvents = [];
+        $createdAt = (string) ($rapportageView['created_at'] ?? '');
+        $submittedAt = (string) ($rapportageView['submitted_at'] ?? '');
+        $reporterName = (string) ($rapportageView['organization_name'] ?? 'Organisation');
+
+        if ($createdAt !== '') {
+            $submissionEvents[] = [
+                'id' => 0,
+                'action' => 'CREATE',
+                'status_label' => 'Créé',
+                'event_note' => 'Alerte créée par l\'organisation.',
+                'created_at' => $createdAt,
+                'actor_name' => $reporterName,
+                'is_decision_change' => 0,
+                'change_note' => '',
+            ];
+        }
+
+        if ($submittedAt !== '' && $submittedAt !== $createdAt) {
+            $submissionEvents[] = [
+                'id' => 0,
+                'action' => 'SUBMIT',
+                'status_label' => 'Soumis',
+                'event_note' => 'Alerte soumise au cluster pour décision.',
+                'created_at' => $submittedAt,
+                'actor_name' => $reporterName,
+                'is_decision_change' => 0,
+                'change_note' => '',
+            ];
+        }
+
+        $decisionLabelByAction = [
+            'VALIDATE' => 'Validation',
+            'REQUEST_INFO' => 'Demande d\'information',
+            'REJECT' => 'Rejet',
+        ];
+
+        $lastDecisionAction = '';
+        foreach ($rapportageTimeline as &$timelineEvent) {
+            if (!is_array($timelineEvent)) {
+                continue;
+            }
+
+            $actionCode = strtoupper(trim((string) ($timelineEvent['action'] ?? '')));
+            if (!in_array($actionCode, ['VALIDATE', 'REQUEST_INFO', 'REJECT'], true)) {
+                $statusForInference = strtolower(trim(str_replace(['é', 'è', 'ê'], 'e', (string) ($timelineEvent['status_label'] ?? ''))));
+                if (str_contains($statusForInference, 'approuve') || str_contains($statusForInference, 'valide') || str_contains($statusForInference, 'publie')) {
+                    $actionCode = 'VALIDATE';
+                } elseif (str_contains($statusForInference, 'rejet')) {
+                    $actionCode = 'REJECT';
+                } elseif (str_contains($statusForInference, 'demande') || str_contains($statusForInference, 'revision') || str_contains($statusForInference, 'revue')) {
+                    $actionCode = 'REQUEST_INFO';
+                }
+            }
+
+            $timelineEvent['action'] = $actionCode;
+            $timelineEvent['is_decision_change'] = 0;
+            $timelineEvent['change_note'] = '';
+
+            if (in_array($actionCode, ['VALIDATE', 'REQUEST_INFO', 'REJECT'], true)) {
+                if ($lastDecisionAction !== '' && $lastDecisionAction !== $actionCode) {
+                    $timelineEvent['is_decision_change'] = 1;
+                    $timelineEvent['change_note'] = 'Décision modifiée : '
+                        . ($decisionLabelByAction[$lastDecisionAction] ?? $lastDecisionAction)
+                        . ' -> '
+                        . ($decisionLabelByAction[$actionCode] ?? $actionCode);
+                }
+                $lastDecisionAction = $actionCode;
+            }
+        }
+        unset($timelineEvent);
+
+        if ($submissionEvents !== []) {
+            $rapportageTimeline = array_merge($submissionEvents, $rapportageTimeline);
+            usort($rapportageTimeline, static function (array $a, array $b): int {
+                $timeA = strtotime((string) ($a['created_at'] ?? '')) ?: 0;
+                $timeB = strtotime((string) ($b['created_at'] ?? '')) ?: 0;
+                if ($timeA === $timeB) {
+                    return ((int) ($a['id'] ?? 0)) <=> ((int) ($b['id'] ?? 0));
+                }
+                return $timeA <=> $timeB;
+            });
+        }
+
         if ($rapportageTimeline === []) {
             $syntheticTimeline = [];
-            $createdAt = (string) ($rapportageView['created_at'] ?? '');
             if ($createdAt !== '') {
                 $syntheticTimeline[] = [
+                    'id' => 0,
+                    'action' => 'SUBMIT',
                     'status_label' => 'Soumis',
                     'event_note' => 'Rapport enregistré dans SyDRA.',
                     'created_at' => $createdAt,
                     'actor_name' => (string) ($rapportageView['organization_name'] ?? 'Organisation'),
+                    'is_decision_change' => 0,
+                    'change_note' => '',
                 ];
             }
 
             $publishedAt = (string) ($rapportageView['published_at'] ?? '');
             if ($publishedAt !== '') {
                 $syntheticTimeline[] = [
+                    'id' => 0,
+                    'action' => 'VALIDATE',
                     'status_label' => 'Publié',
                     'event_note' => 'Rapport validé et publié.',
                     'created_at' => $publishedAt,
                     'actor_name' => 'Lead GTMP',
+                    'is_decision_change' => 0,
+                    'change_note' => '',
                 ];
             }
 
@@ -3315,12 +3624,15 @@ if ($page === 'tableau_de_bord' && is_array($authUser)) {
                          ' . $typeExpr . ' AS report_type,
                          ' . $locationExpr . ' AS location_text,
                          ' . $statusExpr . ' AS workflow_status,
-                         ' . $orgExpr . ' AS organization_name
+                         ' . $orgExpr . ' AS organization_name,
+                         ' . $userExpr . ' AS owner_user_id
                   FROM reports r
                   ' . $joinUserSql;
     $recentParams = [];
-    if (!$isLeadOrAdminDashboard && $reportUserFk !== null) {
-        $recentSql .= ' WHERE r.' . $reportUserFk . ' = :user_id';
+    if ($isLeadOrAdminDashboard) {
+        $recentSql .= ' WHERE ' . $statusNormalizedExpr . ' <> "brouillon"';
+    } elseif ($reportUserFk !== null) {
+        $recentSql .= ' WHERE (r.' . $reportUserFk . ' = :user_id OR ' . $statusNormalizedExpr . ' IN ("valide", "validee", "approuve", "approuvé", "approved", "publie", "published"))';
         $recentParams['user_id'] = (int) ($authUser['id'] ?? 0);
     }
     $recentSql .= ' ORDER BY r.created_at DESC LIMIT 5';
@@ -3337,11 +3649,14 @@ if ($page === 'tableau_de_bord' && is_array($authUser)) {
                       ' . $gpsLatExpr . ' AS gps_lat,
                       ' . $gpsLngExpr . ' AS gps_lng,
                       ' . $orgExpr . ' AS organization_name,
+                      ' . $userExpr . ' AS owner_user_id,
                       r.created_at
                FROM reports r
                ' . $joinUserSql;
     $mapParams = [];
-    if (!$isLeadOrAdminDashboard && $reportUserFk !== null) {
+    if ($isLeadOrAdminDashboard) {
+        $mapSql .= ' WHERE ' . $statusNormalizedExpr . ' <> "brouillon"';
+    } elseif ($reportUserFk !== null) {
         $mapSql .= ' WHERE (r.' . $reportUserFk . ' = :user_id OR ' . $statusNormalizedExpr . ' IN ("valide", "validee", "approuve", "approuvé", "approved", "publie", "published"))';
         $mapParams['user_id'] = (int) ($authUser['id'] ?? 0);
     }
@@ -3356,7 +3671,8 @@ if ($page === 'tableau_de_bord' && is_array($authUser)) {
                                         SUM(CASE WHEN DATE_FORMAT(r.created_at, "%Y-%m") = DATE_FORMAT(CURRENT_DATE, "%Y-%m") THEN 1 ELSE 0 END) AS month_reports,
                                         SUM(CASE WHEN ' . $statusNormalizedExpr . ' IN ("soumis", "submitted", "en revision", "en revue", "under_review") THEN 1 ELSE 0 END) AS pending_reports,
                                         SUM(CASE WHEN ' . $statusNormalizedExpr . ' IN ("approuve", "approuvé", "approved", "publie", "valide", "validee") THEN 1 ELSE 0 END) AS approved_reports
-                                    FROM reports r');
+                                    FROM reports r
+                                    WHERE ' . $statusNormalizedExpr . ' <> "brouillon"');
         $global = $globalStmt->fetch() ?: [];
 
         $activeOrgCount = 0;
@@ -3471,6 +3787,10 @@ if ($page === 'confirmer_email') {
 
 $pageTitle = $pageMap[$page]['title'] . ' - ' . $config['app_name'];
 $flashes = get_flashes();
+$userEditPopup = $_SESSION['user_edit_popup'] ?? null;
+unset($_SESSION['user_edit_popup']);
+$emailChangePopup = $_SESSION['email_change_popup'] ?? null;
+unset($_SESSION['email_change_popup']);
 
 require __DIR__ . '/pages/en_tete.php';
 
@@ -3483,6 +3803,14 @@ foreach ($flashes as $flash) {
 }
 echo '<script>window.SYDRA_FLASHES = '
     . json_encode($flashPayload, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)
+    . ';</script>';
+
+echo '<script>window.SYDRA_USER_EDIT_POPUP = '
+    . json_encode(is_array($userEditPopup) ? $userEditPopup : null, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)
+    . ';</script>';
+
+echo '<script>window.SYDRA_EMAIL_CHANGE_POPUP = '
+    . json_encode(is_array($emailChangePopup) ? $emailChangePopup : null, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)
     . ';</script>';
 
 require $pageMap[$page]['file'];
