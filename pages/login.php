@@ -1,5 +1,24 @@
 <?php
 /** @var array|null $authUser */
+if (realpath((string) ($_SERVER['SCRIPT_FILENAME'] ?? '')) === __FILE__) {
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        session_start();
+    }
+
+    if (!empty($_SESSION['auth_user_id'])) {
+        header('Location: ../index.php?page=tableau_de_bord');
+        exit;
+    }
+
+    $_SESSION['flash'] = [
+        'type' => 'error',
+        'message' => 'Veuillez vous connecter pour continuer.',
+    ];
+
+    header('Location: ../index.php?page=connexion');
+    exit;
+}
+
 if (!function_exists('csrf_token')) {
     function csrf_token(): string
     {

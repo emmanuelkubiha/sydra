@@ -254,6 +254,7 @@ if (!function_exists('require_auth')) {
     function require_auth(?array $user): void
     {
         if (!is_array($user)) {
+            set_flash('error', 'Veuillez vous connecter pour continuer.');
             header('Location: ?page=connexion');
             exit;
         }
@@ -2462,6 +2463,12 @@ if ($page === 'deconnexion') {
 }
 
 $publicPages = ['connexion', 'mot_de_passe_oublie', 'activation_compte', 'reinitialiser_mot_de_passe', 'confirmer_email'];
+
+if ($page === 'connexion' && is_array($authUser)) {
+    header('Location: ?page=tableau_de_bord');
+    exit;
+}
+
 if (!in_array($page, $publicPages, true)) {
     require_auth($authUser);
 }

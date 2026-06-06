@@ -359,6 +359,83 @@ Important:
 - Ne pas exposer les comptes de test en production.
 - Verifier les permissions ecriture sur `uploads/`.
 
+## 14) Deploiement en Production (Local vers En Ligne)
+
+### 14.1 Exporter la base locale et importer sur le serveur (phpMyAdmin/cPanel)
+
+1. Sur la machine locale (MAMP), ouvrir phpMyAdmin.
+2. Selectionner la base locale (ex: `sydra`).
+3. Onglet Exporter -> format SQL -> methode Rapide (ou Personnalisee si besoin) -> Exporter.
+4. Recuperer le fichier SQL (ex: `sydra.sql`).
+5. Sur l hebergement (cPanel/phpMyAdmin distant), creer la base cible et l utilisateur MySQL de production.
+6. Assigner l utilisateur a la base avec tous les privileges requis.
+7. Ouvrir phpMyAdmin distant, selectionner la base cible puis onglet Importer.
+8. Choisir le fichier SQL exporte localement, lancer l import.
+9. Verifier la presence des tables principales (`users`, `reports`, `report_status_history`, `notifications`, etc.).
+
+Alternative CLI (si SSH disponible):
+
+- Export local: `mysqldump -h 127.0.0.1 -P 8889 -u root -p sydra > sydra.sql`
+- Import distant: `mysql -h <DB_HOST_PROD> -u <DB_USER_PROD> -p <DB_NAME_PROD> < sydra.sql`
+
+### 14.2 Variables exactes a modifier dans `.env`
+
+Avant mise en ligne, adapter le fichier `.env` du serveur de production:
+
+- `APP_ENV=production`
+- `APP_DEBUG=false`
+- `APP_URL=https://votre-domaine`
+
+Base de donnees de production:
+
+- `DB_HOST=<host_mysql_serveur>`
+- `DB_PORT=<port_mysql_serveur>`
+- `DB_NAME=<nom_base_production>`
+- `DB_USER=<utilisateur_mysql_production>`
+- `DB_PASS=<mot_de_passe_mysql_production>`
+
+SMTP de production (emails depuis le serveur en ligne):
+
+- `MAIL_FROM=<adresse_expediteur>`
+- `MAIL_FROM_NAME=SyDRA Notifications`
+- `SMTP_HOST=<smtp_serveur_prod>`
+- `SMTP_PORT=<port_smtp_prod>`
+- `SMTP_AUTH=true`
+- `SMTP_SECURE=tls` (ou `ssl` selon fournisseur)
+- `SMTP_USER=<compte_smtp_prod>`
+- `SMTP_PASS=<mot_de_passe_smtp_prod>`
+- `SUPPORT_EMAIL=<adresse_support_prod>`
+
+Controle recommande:
+
+- Tester un reset de mot de passe en production.
+- Tester une decision Lead (validation/rejet/demande info) pour confirmer l envoi d email.
+
+### 14.3 Permissions de dossiers (ecriture)
+
+Les dossiers de stockage doivent etre inscriptibles par l utilisateur web (Apache/Nginx/PHP-FPM):
+
+- `uploads/`
+- `uploads/avatars/`
+- `uploads/reports/`
+- `uploads/reports/attachments/`
+- `uploads/organizations/logos/`
+
+Exemple Linux:
+
+- `chown -R www-data:www-data uploads`
+- `find uploads -type d -exec chmod 775 {} \;`
+- `find uploads -type f -exec chmod 664 {} \;`
+
+### 14.4 Check-list rapide avant ouverture publique
+
+1. `APP_ENV=production` et `APP_DEBUG=false` confirmes.
+2. Connexion DB production validee.
+3. SMTP production valide (emails sortants OK).
+4. Dossiers `uploads/` inscriptibles.
+5. Comptes de test non exposes.
+6. Login, creation rapport, decision Lead et notifications verifies en conditions reelles.
+
 ### 13.2 Deploiement type
 
 1. Sauvegarder la base actuelle (local)

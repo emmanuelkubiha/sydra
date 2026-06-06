@@ -39,6 +39,33 @@ $reportId = (int) ($rapportageView['id'] ?? 0);
 $gpsLat = is_numeric($rapportageView['gps_lat'] ?? null) ? (float) $rapportageView['gps_lat'] : null;
 $gpsLng = is_numeric($rapportageView['gps_lng'] ?? null) ? (float) $rapportageView['gps_lng'] : null;
 $hasGps = $gpsLat !== null && $gpsLng !== null && $gpsLat !== 0.0 && $gpsLng !== 0.0;
+
+$decisionLocked = $isDecisionRole && !in_array($statusNormalized, ['brouillon', 'soumis'], true);
+$latestDecisionEvent = null;
+if (is_array($rapportageTimeline) && $rapportageTimeline !== []) {
+    for ($idx = count($rapportageTimeline) - 1; $idx >= 0; $idx--) {
+        $candidate = $rapportageTimeline[$idx] ?? null;
+        if (is_array($candidate)) {
+            $latestDecisionEvent = $candidate;
+            break;
+        }
+    }
+}
+
+$decisionComment = trim((string) ($latestDecisionEvent['event_note'] ?? ''));
+if ($decisionComment === '') {
+    $decisionComment = 'Aucun commentaire renseigné.';
+}
+
+$decisionSubmittedRaw = (string) ($latestDecisionEvent['created_at'] ?? '');
+$decisionSubmittedAt = $decisionSubmittedRaw;
+if ($decisionSubmittedRaw !== '') {
+    try {
+        $decisionSubmittedAt = (new DateTime($decisionSubmittedRaw))->format('d/m/Y H:i');
+    } catch (Throwable $e) {
+        $decisionSubmittedAt = $decisionSubmittedRaw;
+    }
+}
 ?>
 
 <div class="card shadow-sm rounded-4 mb-3 rapport-header-card">
@@ -205,7 +232,7 @@ $hasGps = $gpsLat !== null && $gpsLng !== null && $gpsLat !== 0.0 && $gpsLng !==
 </div>
 
 <?php if ($isDecisionRole): ?>
-<div class="card shadow-sm rounded-4 mt-3 rapportage-decision-panel border-0">
+<div id="decision-action-panel" class="card shadow-sm rounded-4 mt-3 rapportage-decision-panel border-0"<?= $decisionLocked ? ' style="display:none;"' : ''; ?>>
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
         <h2 class="h5 mb-0">Panneau de décision Lead GTMP</h2>
         <span class="badge text-bg-light border">Validation intelligente</span>
@@ -230,6 +257,24 @@ $hasGps = $gpsLat !== null && $gpsLng !== null && $gpsLat !== 0.0 && $gpsLng !==
         </button>
     </div>
 </div>
+
+<?php if ($decisionLocked): ?>
+<div id="decision-lock-box" class="card shadow-sm rounded-4 mt-3 border-0 decision-locked-box">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+        <div>
+            <h2 class="h5 mb-2"><i class="fa-solid fa-lock me-2"></i>Décision déjà soumise</h2>
+            <p class="mb-1"><strong>Statut actuel :</strong> <?= htmlspecialchars($status, ENT_QUOTES, 'UTF-8'); ?></p>
+            <p class="mb-1"><strong>Commentaire du Lead :</strong> <?= nl2br(htmlspecialchars($decisionComment, ENT_QUOTES, 'UTF-8')); ?></p>
+            <p class="mb-0"><strong>Soumis le :</strong> <?= htmlspecialchars($decisionSubmittedAt !== '' ? $decisionSubmittedAt : 'Date indisponible', ENT_QUOTES, 'UTF-8'); ?></p>
+        </div>
+        <div>
+            <button type="button" class="btn btn-warning text-dark fw-semibold js-reopen-decision">
+                <i class="fa-solid fa-rotate-left me-1"></i>Modifier la décision
+            </button>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <div class="modal fade" id="decisionInfoModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -393,6 +438,11 @@ $hasGps = $gpsLat !== null && $gpsLng !== null && $gpsLat !== 0.0 && $gpsLng !==
     border-color: #b91c1c !important;
     color: #ffffff !important;
 }
+
+.decision-locked-box {
+    border: 1px solid #f6e0ac;
+    background: linear-gradient(140deg, #fffdf5 0%, #fff8e6 100%);
+}
 </style>
 
 <script>
@@ -441,6 +491,47 @@ $hasGps = $gpsLat !== null && $gpsLng !== null && $gpsLat !== 0.0 && $gpsLng !==
         var forms = document.querySelectorAll('.js-decision-form');
         if (!forms || forms.length === 0) {
             return;
+        }
+
+        function bindDecisionReopen() {
+            var reopenButton = document.querySelector('.js-reopen-decision');
+            var lockBox = document.getElementById('decision-lock-box');
+            var actionPanel = document.getElementById('decision-action-panel');
+
+            if (!reopenButton || !lockBox || !actionPanel) {
+                return;
+            }
+
+            reopenButton.addEventListener('click', function () {
+                if (!(window.Swal && typeof window.Swal.fire === 'function')) {
+                    var ok = window.confirm('La réouverture annulera la décision précédente. Continuer ?');
+                    if (!ok) {
+                        return;
+                    }
+                    lockBox.style.display = 'none';
+                    actionPanel.style.display = '';
+                    return;
+                }
+
+                window.Swal.fire({
+                    title: 'Modifier la décision ?',
+                    text: 'Attention : La réouverture de cette alerte annulera la décision précédente. Vous devrez soumettre une nouvelle décision (Validation, Rejet ou Demande d\'info), et un nouvel email sera envoyé à l\'organisation pour l\'informer de ce changement.',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'Oui, réouvrir l\'alerte',
+                    cancelButtonText: 'Annuler',
+                    confirmButtonColor: '#dc2626',
+                    cancelButtonColor: '#6b7280',
+                    reverseButtons: true
+                }).then(function (result) {
+                    if (!result || !result.isConfirmed) {
+                        return;
+                    }
+
+                    lockBox.style.display = 'none';
+                    actionPanel.style.display = '';
+                });
+            });
         }
 
         var actionLabels = {
@@ -513,10 +604,24 @@ $hasGps = $gpsLat !== null && $gpsLng !== null && $gpsLat !== 0.0 && $gpsLng !==
             var actionTitle = actionLabels[apiAction] || 'Décision soumise';
             var statusText = String((data && data.status) ? data.status : 'Mis à jour');
             var mail = data && data.mail ? data.mail : { attempted: false, success: false, error: '' };
+            var warningText = data && data.warning ? String(data.warning) : '';
 
             if (!(window.Swal && typeof window.Swal.fire === 'function')) {
-                window.alert(actionTitle + ' : ' + statusText);
+                window.alert((warningText !== '' ? warningText : (actionTitle + ' : ' + statusText)));
                 return Promise.resolve();
+            }
+
+            if (warningText !== '') {
+                return window.Swal.fire({
+                    icon: 'warning',
+                    title: actionTitle + ' enregistrée',
+                    html: '<div style="text-align:left;">'
+                        + '<p><strong>Statut:</strong> ' + escapeHtml(statusText) + '</p>'
+                        + '<p style="margin-bottom:0;color:#b45309;">' + escapeHtml(warningText) + '</p>'
+                        + '</div>',
+                    confirmButtonText: 'Compris',
+                    confirmButtonColor: '#d97706'
+                });
             }
 
             if (mail.attempted && !mail.success) {
@@ -583,22 +688,51 @@ $hasGps = $gpsLat !== null && $gpsLng !== null && $gpsLat !== 0.0 && $gpsLng !==
                         return;
                     }
 
+                    var submitButton = form.querySelector('button[type="submit"]');
+                    var originalButtonHtml = submitButton ? submitButton.innerHTML : '';
+                    if (submitButton) {
+                        submitButton.disabled = true;
+                        submitButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Traitement...';
+                    }
+
                     var formData = new FormData();
                     formData.append('csrf', csrf);
                     formData.append('report_id', String(reportId));
                     formData.append('action', apiAction);
                     formData.append('comment', payloadComment);
 
+                    var controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+                    var timeoutId = window.setTimeout(function () {
+                        if (controller) {
+                            controller.abort();
+                        }
+                    }, 20000);
+
                     fetch('api/change_status.php', {
                         method: 'POST',
                         body: formData,
-                        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                        signal: controller ? controller.signal : undefined
                     })
                         .then(function (res) {
-                            return res.json();
+                            return res.text().then(function (bodyText) {
+                                var data;
+                                try {
+                                    data = bodyText ? JSON.parse(bodyText) : {};
+                                } catch (e) {
+                                    throw new Error('Réponse serveur invalide (JSON attendu).');
+                                }
+
+                                if (!res.ok) {
+                                    var msg = data && data.message ? String(data.message) : ('Erreur HTTP ' + res.status);
+                                    throw new Error(msg);
+                                }
+
+                                return data;
+                            });
                         })
                         .then(function (data) {
-                            if (!data || data.ok !== true) {
+                            if (!data || (data.ok !== true && data.success !== true)) {
                                 var baseMsg = (data && data.message) ? String(data.message) : 'Erreur de traitement';
                                 var debugMsg = (data && data.error) ? String(data.error) : '';
                                 throw new Error(debugMsg !== '' ? (baseMsg + ' (' + debugMsg + ')') : baseMsg);
@@ -617,7 +751,10 @@ $hasGps = $gpsLat !== null && $gpsLng !== null && $gpsLat !== 0.0 && $gpsLng !==
                             });
                         })
                         .catch(function (err) {
-                            var message = String(err && err.message ? err.message : err);
+                            var isAbort = err && err.name === 'AbortError';
+                            var message = isAbort
+                                ? 'Le serveur met trop de temps à répondre. Réessayez.'
+                                : String(err && err.message ? err.message : err);
                             if (window.Swal && typeof window.Swal.fire === 'function') {
                                 window.Swal.fire({
                                     icon: 'error',
@@ -628,10 +765,19 @@ $hasGps = $gpsLat !== null && $gpsLng !== null && $gpsLat !== 0.0 && $gpsLng !==
                             } else {
                                 window.alert('Impossible de traiter la décision: ' + message);
                             }
+                        })
+                        .finally(function () {
+                            window.clearTimeout(timeoutId);
+                            if (submitButton) {
+                                submitButton.disabled = false;
+                                submitButton.innerHTML = originalButtonHtml;
+                            }
                         });
                 });
             });
         });
+
+        bindDecisionReopen();
     }
 
     if (document.readyState === 'loading') {
