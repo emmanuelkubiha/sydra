@@ -88,15 +88,49 @@ $hasAnyTab = $canSeeIaSystem || $canSeeSecurity || $canSeeBusiness;
                             </div>
 
                             <form id="form-ia-system" novalidate>
-                                <div class="mb-3">
-                                    <label class="form-label" for="xai_api_key">Clé API xAI (Grok)</label>
-                                    <input type="password"
-                                           class="form-control"
-                                           id="xai_api_key"
-                                           name="xai_api_key"
-                                           autocomplete="new-password"
-                                           placeholder="Saisir une nouvelle clé (laisser vide pour conserver l'actuelle)">
-                                    <small class="text-muted" id="xai-api-key-hint">Chargement de l'état de la clé...</small>
+
+                                <div class="mb-1">
+                                    <label class="form-label fw-semibold" for="active_ai_provider">Fournisseur IA actif</label>
+                                    <select class="form-select" id="active_ai_provider" name="active_ai_provider">
+                                        <option value="xai">xAI (Grok)</option>
+                                        <option value="openai">OpenAI (GPT-4o)</option>
+                                    </select>
+                                </div>
+
+                                <div class="mb-3 mt-3 p-3 rounded-3 border" id="xai-key-block">
+                                    <label class="form-label fw-semibold" for="xai_api_key">
+                                        <i class="fa-solid fa-key me-1 text-primary"></i>Clé API xAI (Grok)
+                                    </label>
+                                    <div class="input-group mb-1">
+                                        <input type="password"
+                                               class="form-control"
+                                               id="xai_api_key"
+                                               name="xai_api_key"
+                                               autocomplete="new-password"
+                                               placeholder="Nouvelle clé (laisser vide pour conserver)">
+                                        <button class="btn btn-outline-secondary" type="button" id="btn-toggle-xai-key" title="Afficher/Masquer">
+                                            <i class="fa-solid fa-eye"></i>
+                                        </button>
+                                    </div>
+                                    <small class="text-muted" id="xai-api-key-hint">Chargement...</small>
+                                </div>
+
+                                <div class="mb-3 p-3 rounded-3 border" id="openai-key-block">
+                                    <label class="form-label fw-semibold" for="openai_api_key">
+                                        <i class="fa-solid fa-key me-1 text-success"></i>Clé API OpenAI (GPT-4o)
+                                    </label>
+                                    <div class="input-group mb-1">
+                                        <input type="password"
+                                               class="form-control"
+                                               id="openai_api_key"
+                                               name="openai_api_key"
+                                               autocomplete="new-password"
+                                               placeholder="Nouvelle clé (laisser vide pour conserver)">
+                                        <button class="btn btn-outline-secondary" type="button" id="btn-toggle-openai-key" title="Afficher/Masquer">
+                                            <i class="fa-solid fa-eye"></i>
+                                        </button>
+                                    </div>
+                                    <small class="text-muted" id="openai-api-key-hint">Chargement...</small>
                                 </div>
 
                                 <div class="form-check form-switch mb-3">
@@ -332,9 +366,27 @@ $hasAnyTab = $canSeeIaSystem || $canSeeSecurity || $canSeeBusiness;
                         maintenanceInput.checked = String(settings.maintenance_mode || '0') === '1';
                     }
 
+                    var providerSelect = document.getElementById('active_ai_provider');
+                    if (providerSelect && settings.active_ai_provider) {
+                        providerSelect.value = settings.active_ai_provider;
+                    }
+
                     var xaiHint = document.getElementById('xai-api-key-hint');
                     if (xaiHint) {
-                        xaiHint.textContent = data.has_xai_api_key ? 'Une clé API est déjà configurée.' : 'Aucune clé API configurée.';
+                        if (data.has_xai_api_key) {
+                            xaiHint.innerHTML = '<i class="fa-solid fa-circle-check text-success me-1"></i>Clé active : <code>' + (data.xai_key_masked || '••••••••') + '</code>';
+                        } else {
+                            xaiHint.innerHTML = '<i class="fa-solid fa-circle-xmark text-danger me-1"></i>Aucune clé configurée.';
+                        }
+                    }
+
+                    var openaiHint = document.getElementById('openai-api-key-hint');
+                    if (openaiHint) {
+                        if (data.has_openai_api_key) {
+                            openaiHint.innerHTML = '<i class="fa-solid fa-circle-check text-success me-1"></i>Clé active : <code>' + (data.openai_key_masked || '••••••••') + '</code>';
+                        } else {
+                            openaiHint.innerHTML = '<i class="fa-solid fa-circle-xmark text-danger me-1"></i>Aucune clé configurée.';
+                        }
                     }
                 }
 
@@ -354,15 +406,37 @@ $hasAnyTab = $canSeeIaSystem || $canSeeSecurity || $canSeeBusiness;
             });
     }
 
+    // Toggle visibilité mot de passe pour les champs de clés
+    ['xai_api_key', 'openai_api_key'].forEach(function (fieldId) {
+        var btnId = 'btn-toggle-' + (fieldId === 'xai_api_key' ? 'xai' : 'openai') + '-key';
+        var btn = document.getElementById(btnId);
+        var field = document.getElementById(fieldId);
+        if (!btn || !field) { return; }
+        btn.addEventListener('click', function () {
+            var isPassword = field.type === 'password';
+            field.type = isPassword ? 'text' : 'password';
+            var icon = btn.querySelector('i');
+            if (icon) {
+                icon.className = isPassword ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye';
+            }
+        });
+    });
+
     var btnSaveIaSystem = document.getElementById('btn-save-ia-system');
     if (btnSaveIaSystem) {
         btnSaveIaSystem.addEventListener('click', function () {
             var xaiInput = document.getElementById('xai_api_key');
+            var openaiInput = document.getElementById('openai_api_key');
+            var providerSelect = document.getElementById('active_ai_provider');
             var maintenanceInput = document.getElementById('maintenance_mode');
 
             var settings = {
                 maintenance_mode: maintenanceInput && maintenanceInput.checked ? '1' : '0'
             };
+
+            if (providerSelect) {
+                settings.active_ai_provider = String(providerSelect.value || 'xai').trim();
+            }
 
             if (xaiInput) {
                 var xaiValue = String(xaiInput.value || '').trim();
@@ -371,14 +445,20 @@ $hasAnyTab = $canSeeIaSystem || $canSeeSecurity || $canSeeBusiness;
                 }
             }
 
+            if (openaiInput) {
+                var openaiValue = String(openaiInput.value || '').trim();
+                if (openaiValue !== '') {
+                    settings.openai_api_key = openaiValue;
+                }
+            }
+
             callApi({ action: 'save_settings', settings: settings })
                 .then(function (data) {
                     if (!data || data.ok !== true) {
                         throw new Error((data && data.message) ? data.message : 'Enregistrement impossible.');
                     }
-                    if (xaiInput) {
-                        xaiInput.value = '';
-                    }
+                    if (xaiInput) { xaiInput.value = ''; }
+                    if (openaiInput) { openaiInput.value = ''; }
                     showToast('success', 'Paramètres enregistrés avec succès');
                     loadSettings();
                 })

@@ -208,6 +208,91 @@ function normalize_messages($messages): array
     return $normalized;
 }
 
+function get_table_columns(PDO $pdo, string $tableName): array
+{
+    $stmt = $pdo->prepare('SELECT COLUMN_NAME
+                           FROM information_schema.COLUMNS
+                           WHERE TABLE_SCHEMA = DATABASE()
+                             AND TABLE_NAME = :table_name');
+    $stmt->execute(['table_name' => $tableName]);
+
+    $columns = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) ?: [] as $col) {
+        $columns[strtolower((string) $col)] = (string) $col;
+    }
+
+    return $columns;
+}
+
+function first_existing_column(array $columns, array $candidates): ?string
+{
+    foreach ($candidates as $candidate) {
+        $key = strtolower((string) $candidate);
+        if (isset($columns[$key])) {
+            return $columns[$key];
+        }
+    }
+    return null;
+}
+
+function get_report_context(PDO $pdo, int $reportId): array
+{
+    if ($reportId <= 0) {
+        return [];
+    }
+
+    $reportCols = get_table_columns($pdo, 'reports');
+    if ($reportCols === [] || first_existing_column($reportCols, ['id']) === null) {
+        return [];
+    }
+
+    $selectParts = ['r.id AS report_id'];
+
+    $map = [
+        'workflow_status' => ['workflow_status', 'status'],
+        'report_type' => ['report_type', 'type'],
+        'urgency_level' => ['urgency_level', 'severity_level', 'gravity_level'],
+        'location_text' => ['location_text', 'location', 'province', 'territory', 'commune', 'village'],
+        'incident_label' => ['incident_label', 'incident_type', 'incident_category'],
+        'content' => ['content', 'description', 'incident_description'],
+        'analysis_text' => ['analysis_text', 'analysis', 'analyse'],
+        'additional_notes' => ['additional_notes', 'notes'],
+        'victims_count' => ['victims_count', 'affected_people', 'nb_victims'],
+        'displaced_households' => ['displaced_households', 'households_displaced', 'nb_displaced_households'],
+        'recommendations_text' => ['recommendations_text', 'recommandations', 'recommendations'],
+        'priority_needs_text' => ['priority_needs_text', 'priority_needs', 'besoins_prioritaires'],
+    ];
+
+    foreach ($map as $alias => $candidates) {
+        $column = first_existing_column($reportCols, $candidates);
+        if ($column !== null) {
+            $selectParts[] = 'r.' . $column . ' AS ' . $alias;
+        }
+    }
+
+    $joinUsers = '';
+    $userCols = get_table_columns($pdo, 'users');
+    $reportUserFk = first_existing_column($reportCols, ['user_id', 'author_id', 'created_by', 'reporter_id', 'reporter_user_id']);
+    if ($reportUserFk !== null && $userCols !== []) {
+        $joinUsers = ' LEFT JOIN users u ON u.id = r.' . $reportUserFk;
+        $orgCol = first_existing_column($userCols, ['organization_name', 'organisation_name', 'full_name', 'name']);
+        if ($orgCol !== null) {
+            $selectParts[] = 'u.' . $orgCol . ' AS organization_name';
+        }
+    }
+
+    $sql = 'SELECT ' . implode(', ', $selectParts) . '
+            FROM reports r'
+            . $joinUsers
+            . ' WHERE r.id = :id LIMIT 1';
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute(['id' => $reportId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    return is_array($row) ? $row : [];
+}
+
 function call_ai_provider(string $provider, string $apiKey, array $messages): array
 {
     $endpoint = '';
@@ -218,7 +303,7 @@ function call_ai_provider(string $provider, string $apiKey, array $messages): ar
         $model = 'gpt-4o';
     } elseif ($provider === 'xai') {
         $endpoint = 'https://api.x.ai/v1/chat/completions';
-        $model = 'grok-beta';
+        $model = 'grok-3';
     } else {
         return ['ok' => false, 'message' => 'Fournisseur IA non supporte.'];
     }
@@ -291,11 +376,23 @@ $userId = (int) $_SESSION['auth_user_id'];
 $role = get_user_role($pdo, $userId);
 
 $action = strtolower(trim((string) ($payload['action'] ?? 'chat')));
+$requestedMode = strtoupper(trim((string) ($payload['mode'] ?? '')));
+$reportId = (int) ($payload['report_id'] ?? (($payload['report_context']['report_id'] ?? 0)));
 $messagesInput = normalize_messages($payload['messages'] ?? []);
-$reportContext = is_array($payload['report_context'] ?? null) ? $payload['report_context'] : [];
+
+$mode = $requestedMode;
+if (!in_array($mode, ['GENERIC_HELP', 'DRAFTING', 'ANALYSIS'], true)) {
+    if ($action === 'analyze_report') {
+        $mode = 'ANALYSIS';
+    } elseif (in_array($action, ['assist_creation', 'generate_structured'], true)) {
+        $mode = 'DRAFTING';
+    } else {
+        $mode = 'GENERIC_HELP';
+    }
+}
 
 $isDecisionRole = in_array($role, ['ADMIN', 'CLUSTER_LEADER', 'LEAD_GTMP', 'GTMP_LEAD'], true);
-if ($action === 'analyze_report' && !$isDecisionRole) {
+if ($mode === 'ANALYSIS' && !$isDecisionRole) {
     http_response_code(403);
     echo json_encode(['ok' => false, 'message' => 'Acces reserve aux roles de decision.']);
     exit;
@@ -320,23 +417,37 @@ if ($apiKey === '') {
 
 $rules = get_codification_rules($pdo);
 $messages = apply_codification_deep($messagesInput, $rules);
-$safeReportContext = apply_codification_deep($reportContext, $rules);
+
+$analysisContext = [];
+if ($mode === 'ANALYSIS') {
+    $analysisContext = get_report_context($pdo, $reportId);
+    if ($analysisContext === []) {
+        http_response_code(404);
+        echo json_encode(['ok' => false, 'message' => 'Alerte introuvable pour analyse.']);
+        exit;
+    }
+}
+$safeAnalysisContext = apply_codification_deep($analysisContext, $rules);
 
 $systemPrompt = '';
-if ($action === 'assist_creation') {
+if ($mode === 'GENERIC_HELP') {
+    $systemPrompt = 'Tu es l\'assistant SyDRA. Tu n\'as accès à aucune donnée du système sur cette page. '
+        . 'Ton seul rôle est d\'expliquer brièvement comment utiliser le système ou inviter l\'utilisateur à aller sur la page de création d\'alerte. '
+        . 'Ne réponds à aucune question sur des incidents réels.';
+} elseif ($mode === 'DRAFTING' && $action === 'generate_structured') {
+    $systemPrompt = 'Tu es un assistant de structuration d\'alerte. '
+        . 'Retourne uniquement un JSON valide sans markdown ni texte additionnel, selon ce schema exact: '
+        . '{"incident_type":"...","urgency_level":"Faible|Moyenne|Elevee|Critique","location":"...","contexte":"...","analyse":"...","besoins_prioritaires":"...","recommandations":"...","victims_count":0,"displaced_households":0}. '
+        . 'Si une valeur manque, propose une valeur raisonnable sans inventer des details sensibles.';
+} elseif ($mode === 'DRAFTING') {
     $systemPrompt = 'Tu es un Expert de monitoring de protection humanitaire. '
         . 'Objectif: aider l\'agent a collecter les informations manquantes pour une alerte de protection. '
         . 'Pose des questions courtes, une a la fois, jusqu\'a obtenir: contexte, localisation, type d\'incident, victimes, menages deplaces, analyse, besoins prioritaires, recommandations. '
         . 'Quand les informations semblent suffisantes, ajoute a la fin de ta reponse le marqueur [[READY_TO_GENERATE]]. '
         . 'Reste factuel et professionnel.';
-} elseif ($action === 'generate_structured') {
-    $systemPrompt = 'Tu es un assistant de structuration d\'alerte. '
-        . 'Retourne uniquement un JSON valide sans markdown ni texte additionnel, selon ce schema exact: '
-        . '{"incident_type":"...","urgency_level":"Faible|Moyenne|Elevee|Critique","location":"...","contexte":"...","analyse":"...","besoins_prioritaires":"...","recommandations":"...","victims_count":0,"displaced_households":0}. '
-        . 'Si une valeur manque, propose une valeur raisonnable sans inventer des details sensibles.';
-} elseif ($action === 'analyze_report') {
+} elseif ($mode === 'ANALYSIS') {
     $systemPrompt = 'Tu es un conseiller IA pour un Lead GTMP. '
-        . 'Tu dois analyser uniquement le contexte fourni de l\'alerte courante. '
+        . 'Tu dois analyser uniquement le contexte codifie de l\'alerte courante. '
         . 'N\'utilise aucune connaissance externe non necessaire. '
         . 'Fournis des reponses operationnelles, concises et actionnables.';
 } else {
@@ -345,10 +456,10 @@ if ($action === 'assist_creation') {
 
 $preparedMessages = [['role' => 'system', 'content' => $systemPrompt]];
 
-if ($action === 'analyze_report' && $safeReportContext !== []) {
+if ($mode === 'ANALYSIS' && $safeAnalysisContext !== []) {
     $preparedMessages[] = [
         'role' => 'system',
-        'content' => 'Contexte alerte (base unique de reponse): ' . json_encode($safeReportContext, JSON_UNESCAPED_UNICODE),
+        'content' => 'Contexte alerte (base unique de reponse): ' . json_encode($safeAnalysisContext, JSON_UNESCAPED_UNICODE),
     ];
 }
 
@@ -368,6 +479,7 @@ if (($result['ok'] ?? false) !== true) {
 
 echo json_encode([
     'ok' => true,
+    'mode' => $mode,
     'provider' => (string) ($result['provider'] ?? $provider),
     'model' => (string) ($result['model'] ?? ''),
     'message' => (string) ($result['content'] ?? ''),

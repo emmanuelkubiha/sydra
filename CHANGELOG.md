@@ -2,6 +2,30 @@
 
 Tous les changements notables du projet SyDRA sont documentés ici.
 
+## v0.9.2 - 2026-06-07
+
+### Ajouts
+- Intégration d'un widget IA global flottant (toutes pages authentifiées) avec ouverture Offcanvas.
+- Ajout d'un badge dynamique de mode dans le chat: aide générale ou analyse codifiée.
+- Nouveau script client `assets/js/ai_chat.js` pour routage sécurisé par page.
+
+### Sécurité
+- Politique Zero Data Leak côté frontend:
+	- `GENERIC_HELP` sur pages non autorisées (aucune donnée métier envoyée).
+	- `DRAFTING` sur pages de création.
+	- `ANALYSIS` sur détail alerte avec envoi du seul `report_id`.
+- Durcissement de `api/ai_handler.php`:
+	- logique serveur pilotée par mode,
+	- récupération des données d'alerte directement en base en mode `ANALYSIS`,
+	- codification obligatoire (`codification_rules`) avant injection dans le prompt,
+	- blocage des rôles non autorisés pour l'analyse.
+
+### Refactoring
+- Suppression du chatbot local spécifique de la page détail au profit d'un canal IA global unique.
+
+### Correctifs
+- Ajustement du loader global pour ignorer le formulaire du chat IA et éviter les comportements de faux rechargement/boucle visuelle.
+
 ## v0.9.1 - 2026-06-06
 
 ### Ajouts

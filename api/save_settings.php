@@ -88,6 +88,8 @@ function ensureSystemSettingsTable(PDO $pdo): void
 
     $defaults = [
         ['xai_api_key', '', 'Clé API xAI (Grok)'],
+        ['openai_api_key', '', 'Clé API OpenAI'],
+        ['active_ai_provider', 'xai', 'Fournisseur IA actif (xai ou openai)'],
         ['maintenance_mode', '0', 'Activation du mode maintenance'],
         ['review_deadline_days', '3', 'Délai de revue par défaut (jours)'],
     ];
@@ -196,8 +198,12 @@ if ($action === 'load') {
         'settings' => [
             'maintenance_mode' => (string) ($settings['maintenance_mode'] ?? '0'),
             'review_deadline_days' => (string) ($settings['review_deadline_days'] ?? '3'),
+            'active_ai_provider' => (string) ($settings['active_ai_provider'] ?? 'xai'),
         ],
         'has_xai_api_key' => trim((string) ($settings['xai_api_key'] ?? '')) !== '',
+        'has_openai_api_key' => trim((string) ($settings['openai_api_key'] ?? '')) !== '',
+        'xai_key_masked' => trim((string) ($settings['xai_api_key'] ?? '')) !== '' ? '••••••••' . substr(trim((string) ($settings['xai_api_key'] ?? '')), -4) : '',
+        'openai_key_masked' => trim((string) ($settings['openai_api_key'] ?? '')) !== '' ? '••••••••' . substr(trim((string) ($settings['openai_api_key'] ?? '')), -4) : '',
         'codification_rules' => $rules,
     ]);
     exit;
@@ -225,7 +231,7 @@ if ($action === 'save_settings') {
             continue;
         }
 
-        if (in_array($settingKey, ['xai_api_key', 'maintenance_mode'], true) && !$isAdmin) {
+        if (in_array($settingKey, ['xai_api_key', 'openai_api_key', 'active_ai_provider', 'maintenance_mode'], true) && !$isAdmin) {
             http_response_code(403);
             echo json_encode(['ok' => false, 'message' => 'Seul un ADMIN peut modifier la configuration IA/Système.']);
             exit;
@@ -250,13 +256,20 @@ if ($action === 'save_settings') {
             $settingValue = (string) $days;
         }
 
-        if ($settingKey === 'xai_api_key' && $settingValue === '') {
-            // Laisser la valeur actuelle si le champ admin est vide.
+        if (in_array($settingKey, ['xai_api_key', 'openai_api_key'], true) && $settingValue === '') {
+            // Conserver la clé existante si le champ est laissé vide.
             continue;
+        }
+
+        if ($settingKey === 'active_ai_provider' && !in_array($settingValue, ['xai', 'openai'], true)) {
+            echo json_encode(['ok' => false, 'message' => 'Fournisseur IA invalide.']);
+            exit;
         }
 
         $descriptions = [
             'xai_api_key' => 'Clé API xAI (Grok)',
+            'openai_api_key' => 'Clé API OpenAI',
+            'active_ai_provider' => 'Fournisseur IA actif (xai ou openai)',
             'maintenance_mode' => 'Activation du mode maintenance',
             'review_deadline_days' => 'Délai de revue par défaut (jours)',
         ];

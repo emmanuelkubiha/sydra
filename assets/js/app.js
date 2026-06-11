@@ -132,6 +132,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
         document.querySelectorAll('form').forEach(function (form) {
             form.addEventListener('submit', function () {
+                if (form.classList.contains('js-ai-chat-form')) {
+                    return;
+                }
+
                 if (form.classList.contains('js-create-confirm-form')) {
                     return;
                 }

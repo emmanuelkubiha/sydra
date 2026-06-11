@@ -2,13 +2,14 @@
 
 ## Version et suivi
 
-- Version courante: `v0.9.0`
-- Derniere mise a jour: `2026-06-06`
+- Version courante: `v0.9.2`
+- Derniere mise a jour: `2026-06-07`
 - Canal: `main`
 - Historique complet des versions: voir `CHANGELOG.md`
 
 Historique rapide:
 
+- `v0.9.2` (2026-06-07): integration du widget IA global securise (offcanvas), routage Zero Data Leak par page (GENERIC_HELP/DRAFTING/ANALYSIS), analyse serveur basee sur report_id avec codification obligatoire, suppression du contexte incident envoye par le client.
 - `v0.9.0` (2026-06-06): durcissement workflow de decision (JSON robuste, warning SMTP), verrouillage/reouverture de decision, corrections redirections login/session, guide de deploiement production enrichi.
 
 SyDRA (Systeme de Documentation, de Rapportage et d'Alerte) est une application PHP/MySQL simple, sans MVC lourd, utilisee pour la saisie, le suivi et la coordination d'informations terrain.
@@ -36,6 +37,7 @@ SyDRA (Systeme de Documentation, de Rapportage et d'Alerte) est une application 
 - Footer global: `pages/pied_de_page.php`
   - ferme le layout principal
   - charge `assets/js/app.js`
+  - charge le widget IA global securise (`assets/js/ai_chat.js`) pour les sessions authentifiees
 - Pages principales:
   - `pages/login.php`
   - `pages/forgot_password.php`
@@ -88,6 +90,7 @@ SyDRA/
 ├── assets/
 │   ├── css/style.css             # Styles globaux + toasts + layout
 │   └── js/app.js                 # Loader, toasts, interactions UI
+│   └── js/ai_chat.js             # Widget IA global + routeur mode securise
 │   └── img/sydra-logo/           # Logos officiels utilises en production
 ├── Annexes/
 │   └── assets-source/SyDRA-Logo/ # Sources graphiques archivees
@@ -558,6 +561,45 @@ Types de mails, evenement declencheur et destinataires:
 2. Importer `database/schema.sql`.
 3. Lancer `composer install`.
 4. Verifier permissions sur `uploads/`.
+
+## 17) Guide de Deploiement LWS (Sans Conflit Local/Production)
+
+Ce guide est prevu pour le domaine `https://sydra.fosip-drc.org` et un hebergement mutualise LWS.
+
+### 17.1 Base de donnees: export local puis import LWS
+
+- Ouvrir phpMyAdmin en local (MAMP) et selectionner la base locale `sydra`.
+- Cliquer `Exporter` puis choisir le format `SQL` et la methode `Rapide`.
+- Enregistrer le fichier exporte, par exemple `sydra_production.sql`.
+- Ouvrir phpMyAdmin LWS: `https://mysql34.lwspanel.com/phpmyadmin`.
+- Selectionner la base distante `fosip2610679_4qukis`.
+- Cliquer `Importer`, choisir `sydra_production.sql`, puis lancer l import.
+- Verifier que les tables critiques existent apres import: `users`, `reports`, `report_status_history`, `report_attachments`, `notifications`, `system_settings`.
+- Faire un test SQL rapide dans phpMyAdmin LWS pour confirmer qu il n y a pas d erreur de structure.
+
+### 17.2 Transfert fichiers (FTP ou File Manager)
+
+- Envoyer les dossiers applicatifs necessaires: `api/`, `actions/`, `assets/`, `config/`, `database/`, `mail/`, `pages/`, `scripts/`, `vendor/`, `uploads/`, `index.php`.
+- Ne pas envoyer les fichiers de contexte local ou sensibles de developpement: `.env`, `.env.`, `.DS_Store`, sauvegardes locales et autres fichiers temporaires.
+- Envoyer le fichier `.env.production` sur le serveur.
+- Renommer `.env.production` en `.env` sur le serveur distant.
+- Verifier que le `.env` final sur le serveur contient bien l URL de production et les identifiants MySQL de production.
+- Verifier que `APP_ENV=production` et `APP_DEBUG=false` pour eviter les fuites d erreurs en public.
+
+### 17.3 Permissions (CHMOD) pour les uploads
+
+- Modifier les droits du dossier `uploads/` pour autoriser l ecriture par le serveur web.
+- Regle recommandee: `CHMOD 755` pour les dossiers.
+- Si l upload echoue encore sur LWS, appliquer temporairement `CHMOD 777` sur `uploads/` puis reduire vers `755` des que possible.
+- Verifier en priorite ces chemins: `uploads/`, `uploads/avatars/`, `uploads/reports/`, `uploads/reports/attachments/`, `uploads/organizations/logos/`.
+
+### 17.4 Verification finale anti-crash
+
+- Tester la connexion utilisateur.
+- Creer un rapport FLASH avec piece jointe pour verifier les ecritures disque.
+- Ouvrir la page detail du rapport et verifier les actions de workflow.
+- Verifier l envoi d un email transactionnel (invitation, reset, ou notification).
+- Verifier l URL publique: `https://sydra.fosip-drc.org`.
 5. Tester: login, reset password, invitation, SMTP.
 
 ## 12) Verification technique

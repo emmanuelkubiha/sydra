@@ -139,9 +139,6 @@ if (in_array($statusNormalized, ['valide', 'publie', 'approuve'], true)) {
     $decisionLockTone = 'decision-lock-info';
 }
 
-$aiAnalysisEnabledStatuses = ['soumis', 'en revue', 'en revision', 'demande information', 'demande d information', 'demande info'];
-$isAiAnalysisVisible = $isDecisionRole && in_array($statusNormalized, $aiAnalysisEnabledStatuses, true);
-
 // Métadonnées visuelles du statut courant pour le panneau verrouillé.
 $decisionStatusMeta = status_ui_meta($status);
 $reviewDeadlineRaw = trim((string) ($rapportageView['review_deadline'] ?? ''));
@@ -154,26 +151,6 @@ if ($reviewDeadlineRaw !== '') {
     }
 }
 
-$aiReportContext = [
-    'report_id' => $reportId,
-    'organization_name' => $orgName,
-    'workflow_status' => $status,
-    'report_type' => (string) ($rapportageView['report_type'] ?? 'FLASH'),
-    'urgency_level' => (string) ($rapportageView['urgency_level'] ?? 'Moyenne'),
-    'location_text' => (string) ($rapportageView['location_text'] ?? $rapportageView['province'] ?? ''),
-    'incident_label' => (string) ($rapportageView['incident_label'] ?? ''),
-    'content' => (string) ($rapportageView['content'] ?? ''),
-    'analysis_text' => (string) ($rapportageView['analysis_text'] ?? ''),
-    'additional_notes' => (string) ($rapportageView['additional_notes'] ?? ''),
-    'victims_count' => (int) ($rapportageView['victims_count'] ?? 0),
-    'displaced_households' => (int) ($rapportageView['displaced_households'] ?? 0),
-    'recommendations_text' => (string) ($rapportageView['recommendations_text'] ?? ''),
-    'priority_needs_text' => (string) ($rapportageView['priority_needs_text'] ?? ''),
-];
-$aiReportContextJson = json_encode($aiReportContext, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT);
-if (!is_string($aiReportContextJson)) {
-    $aiReportContextJson = '{}';
-}
 ?>
 
 <div class="card shadow-sm rounded-4 mb-3 rapport-header-card">
@@ -360,34 +337,7 @@ if (!is_string($aiReportContextJson)) {
     </div>
 </div>
 
-<?php if ($isAiAnalysisVisible): ?>
-<button type="button"
-        class="btn btn-primary ai-analysis-fab"
-        data-bs-toggle="offcanvas"
-        data-bs-target="#aiAnalysisOffcanvas"
-        aria-controls="aiAnalysisOffcanvas">
-    <i class="fa-solid fa-robot me-1"></i>Discuter avec l'IA
-</button>
-
-<div class="offcanvas offcanvas-end ai-analysis-offcanvas" tabindex="-1" id="aiAnalysisOffcanvas" aria-labelledby="aiAnalysisOffcanvasLabel">
-    <div class="offcanvas-header border-bottom">
-        <h2 class="offcanvas-title h6 mb-0" id="aiAnalysisOffcanvasLabel">
-            <i class="fa-solid fa-brain me-2 text-primary"></i>Assistant d'analyse décisionnelle
-        </h2>
-        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Fermer"></button>
-    </div>
-    <div class="offcanvas-body d-flex flex-column p-0">
-        <div class="ai-analysis-chat" id="ai-analysis-chat"></div>
-        <form id="ai-analysis-form" class="ai-analysis-form border-top">
-            <input type="hidden" id="ai-analysis-csrf" value="<?= htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
-            <textarea id="ai-analysis-input" class="form-control" rows="2" placeholder="Ex: Fais-moi un résumé de 2 lignes" required></textarea>
-            <button type="submit" class="btn btn-primary" id="ai-analysis-send">
-                <i class="fa-solid fa-paper-plane"></i>
-            </button>
-        </form>
-    </div>
-</div>
-
+<?php if ($isDecisionRole): ?>
 <div id="decision-action-panel" class="card border-0 shadow-sm rounded-4 mt-3 rapportage-decision-panel"<?= $decisionLocked ? ' style="display:none;"' : ''; ?>>
     <div class="card-header decision-panel-header border-0 rounded-top-4 px-4 py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
         <h2 class="h5 mb-0 d-flex align-items-center gap-2">
@@ -932,63 +882,6 @@ if (!is_string($aiReportContextJson)) {
 
 .timeline-dot-secondary {
     background: rgba(100, 116, 139, 0.15);
-}
-
-.ai-analysis-fab {
-    position: fixed;
-    right: 18px;
-    bottom: 22px;
-    z-index: 1080;
-    border-radius: 999px;
-    padding: 0.55rem 1rem;
-    box-shadow: 0 14px 24px rgba(0, 91, 187, 0.28);
-}
-
-.ai-analysis-offcanvas {
-    width: min(460px, 96vw);
-}
-
-.ai-analysis-chat {
-    flex: 1;
-    overflow-y: auto;
-    background: #f8fafc;
-    padding: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.ai-analysis-bubble {
-    max-width: 86%;
-    border-radius: 14px;
-    padding: 9px 11px;
-    line-height: 1.42;
-    white-space: pre-wrap;
-}
-
-.ai-analysis-bubble.user {
-    align-self: flex-end;
-    background: #005BBB;
-    color: #fff;
-    border-bottom-right-radius: 8px;
-}
-
-.ai-analysis-bubble.assistant {
-    align-self: flex-start;
-    background: #e2e8f0;
-    color: #0f172a;
-    border-bottom-left-radius: 8px;
-}
-
-.ai-analysis-form {
-    display: flex;
-    gap: 8px;
-    padding: 10px;
-    background: #fff;
-}
-
-.ai-analysis-form textarea {
-    resize: none;
 }
 
 @keyframes sydraPulseIcon {
@@ -1633,103 +1526,14 @@ if (!is_string($aiReportContextJson)) {
         bindDecisionReopen();
     }
 
-    function bindAiAnalysisChat() {
-        var chatBox = document.getElementById('ai-analysis-chat');
-        var form = document.getElementById('ai-analysis-form');
-        var input = document.getElementById('ai-analysis-input');
-        var sendBtn = document.getElementById('ai-analysis-send');
-        var csrfInput = document.getElementById('ai-analysis-csrf');
-
-        if (!chatBox || !form || !input || !sendBtn || !csrfInput) {
-            return;
-        }
-
-        var csrf = String(csrfInput.value || '');
-        var reportContext = <?= $aiReportContextJson; ?>;
-        var conversation = [];
-
-        function pushBubble(role, text) {
-            var div = document.createElement('div');
-            div.className = 'ai-analysis-bubble ' + (role === 'user' ? 'user' : 'assistant');
-            div.textContent = String(text || '');
-            chatBox.appendChild(div);
-            chatBox.scrollTop = chatBox.scrollHeight;
-        }
-
-        function setBusy(isBusy) {
-            sendBtn.disabled = isBusy;
-            input.disabled = isBusy;
-        }
-
-        function askAnalysis(promptText) {
-            conversation.push({ role: 'user', content: promptText });
-            pushBubble('user', promptText);
-            setBusy(true);
-
-            fetch('api/ai_handler.php', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest'
-                },
-                body: JSON.stringify({
-                    action: 'analyze_report',
-                    csrf: csrf,
-                    report_context: reportContext,
-                    messages: conversation
-                })
-            })
-                .then(function (res) { return res.json(); })
-                .then(function (data) {
-                    if (!data || data.ok !== true) {
-                        throw new Error((data && data.message) ? data.message : 'Reponse IA indisponible.');
-                    }
-
-                    var reply = String(data.message || '').trim();
-                    conversation.push({ role: 'assistant', content: reply });
-                    pushBubble('assistant', reply);
-                })
-                .catch(function (error) {
-                    if (window.Swal && typeof window.Swal.fire === 'function') {
-                        window.Swal.fire({
-                            icon: 'error',
-                            title: 'Analyse IA indisponible',
-                            text: error.message || 'Impossible de contacter l\'IA.',
-                            customClass: getSwalBootstrapClasses(),
-                            buttonsStyling: false,
-                            didOpen: animateSwalIcon
-                        });
-                    }
-                })
-                .finally(function () {
-                    setBusy(false);
-                    input.focus();
-                });
-        }
-
-        form.addEventListener('submit', function (event) {
-            event.preventDefault();
-            var text = String(input.value || '').trim();
-            if (text === '') {
-                return;
-            }
-            input.value = '';
-            askAnalysis(text);
-        });
-
-        pushBubble('assistant', 'Assistant IA pret. Posez une question sur cette alerte (resume, faiblesses, proposition d\'email de correction, etc.).');
-    }
-
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function () {
             initMiniMap();
             bindDecisionForms();
-            bindAiAnalysisChat();
         });
     } else {
         initMiniMap();
         bindDecisionForms();
-        bindAiAnalysisChat();
     }
 })();
 </script>
