@@ -491,6 +491,8 @@ if ($selectedOrgId !== '' && ctype_digit($selectedOrgId) === false) {
     }
 
     var API_ENDPOINT = appBasePath() + 'api/get_dashboard_filtered.php';
+    // Garde anti-boucle : empêche les appels AJAX simultanés qui créaient la boucle infinie.
+    var _filterInProgress = false;
 
     function showDeniedDetailsAccess() {
         if (window.Swal && typeof window.Swal.fire === 'function') {
@@ -610,10 +612,10 @@ if ($selectedOrgId !== '' && ctype_digit($selectedOrgId) === false) {
 
     function urgencyColor(level) {
         var n = normalize(level);
-        if (n.indexOf('crit') >= 0) return '#E53E3E';
-        if (n.indexOf('ele') >= 0) return '#f97316';
-        if (n.indexOf('moy') >= 0) return '#f59e0b';
-        return '#005BBB';
+        if (n.indexOf('crit') >= 0) return '#dc3545'; // Rouge
+        if (n.indexOf('urg') >= 0 || n.indexOf('ele') >= 0) return '#fd7e14'; // Orange
+        if (n.indexOf('norm') >= 0 || n.indexOf('moy') >= 0) return '#ffc107'; // Jaune
+        return '#0d6efd'; // Bleu par défaut
     }
 
     function severityMeta(level) {
@@ -1366,6 +1368,13 @@ if ($selectedOrgId !== '' && ctype_digit($selectedOrgId) === false) {
     }
 
     function applyFilter(params, isReset) {
+        // Verrou anti-boucle : si un appel est déjà en cours, on ignore le suivant.
+        if (_filterInProgress) {
+            console.warn('[SyDRA] applyFilter ignoré : un filtre est déjà en cours.');
+            return;
+        }
+        _filterInProgress = true;
+
         var kpiCards = ['stat-total', 'stat-critiques', 'stat-attente', 'stat-valides'];
         kpiCards.forEach(function (id) {
             var el = document.getElementById(id);
@@ -1383,20 +1392,34 @@ if ($selectedOrgId !== '' && ctype_digit($selectedOrgId) === false) {
             body: params
         })
         .then(function (resp) {
-            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            // ✅ DEBUG AVANCÉ : Si le serveur retourne une erreur HTTP (ex: PHP 500),
+            // on lit le corps brut de la réponse pour voir l'erreur PHP réelle dans la console.
+            if (!resp.ok) {
+                var statusCode = resp.status;
+                return resp.text().then(function (rawBody) {
+                    console.error(
+                        '[SyDRA][applyFilter] ❌ Erreur HTTP ' + statusCode +
+                        ' depuis ' + API_ENDPOINT + '\n' +
+                        '--- Réponse serveur brute (cherchez l\'erreur PHP ci-dessous) ---\n' +
+                        rawBody
+                    );
+                    throw new Error('HTTP ' + statusCode + ' — Erreur serveur (voir Console pour détails PHP)');
+                });
+            }
             return resp.json();
         })
         .then(function (data) {
-            if (!data || data.ok === false) {
-                throw new Error((data && data.message) ? String(data.message) : 'Réponse API invalide');
+            if (!data || data.success === false) {
+                throw new Error((data && data.error) ? String(data.error) : 'Réponse API invalide');
             }
 
-            var s = data.stats || {};
+            // Mission 4: Mettre à jour le texte des cartes KPI
+            var kpi = data.kpi || {};
             var statMap = {
-                'stat-total': s.total || 0,
-                'stat-critiques': s.critiques || 0,
-                'stat-attente': s.attente || 0,
-                'stat-valides': s.valides || 0
+                'stat-total': kpi.total || 0,
+                'stat-critiques': kpi.critiques || 0,
+                'stat-attente': kpi.en_attente || 0,
+                'stat-valides': kpi.valides || 0
             };
 
             Object.keys(statMap).forEach(function (id) {
@@ -1407,59 +1430,72 @@ if ($selectedOrgId !== '' && ctype_digit($selectedOrgId) === false) {
                 }
             });
 
-            var markers = Array.isArray(data.markers) ? data.markers : [];
+            // Mission 4: Marqueurs Leaflet
+            var markers = Array.isArray(data.map_markers) ? data.map_markers : [];
             if (hubMap && markersLayer) {
+                // Vide les anciens marqueurs de la carte
+                markersLayer.clearLayers();
                 buildMarkers(markers);
             }
 
-            if (staticChartPayload === null) {
-                staticChartPayload = data.charts || { trend: { labels: [], values: [] }, severity: { labels: [], values: [] } };
-            }
-            if (staticCloudMarkers.length === 0 && markers.length > 0) {
-                staticCloudMarkers = markers.slice();
-            }
-
-            var visualsCharts = staticChartPayload || { trend: { labels: [], values: [] }, severity: { labels: [], values: [] } };
-            var visualsMarkers = staticCloudMarkers.length > 0 ? staticCloudMarkers : markers;
-
+            // Mise à jour des graphiques
+            var chartData = data.chart_data || [];
+            var visualsCharts = { trend: { labels: [], values: [] }, severity: { labels: [], values: [] } };
+            // Transformation de chartData (period => total) vers le format attendu par les graphiques
+            chartData.forEach(function(row) {
+                visualsCharts.trend.labels.push(row.period);
+                visualsCharts.trend.values.push(row.total);
+            });
             updateCharts(visualsCharts);
-            updateSummaries(visualsCharts, visualsMarkers);
-
+            
+            // Mise à jour du résumé textuel (statut)
             if (statusBox && statusText) {
                 if (isReset) {
                     statusBox.classList.add('d-none');
                 } else {
-                    var markerCount = Array.isArray(data.markers) ? data.markers.length : 0;
                     var details = activeFilterLabel();
-                    statusText.textContent = markerCount + ' alerte(s) filtrée(s)' + (details ? ' | ' + details : '');
+                    statusText.textContent = markers.length + ' alerte(s) filtrée(s)' + (details ? ' | ' + details : '');
                     statusBox.classList.remove('d-none');
                 }
             }
         })
         .catch(function (err) {
+            // ✅ FIX BOUCLE INFINIE : On n'effectue PLUS de window.location.assign().
+            // L'ancienne redirection vers '?page=rapportage' en cas d'erreur AJAX causait
+            // un rechargement qui déclenchait la même requête erreur, créant une boucle infinie.
+            // On affiche l'erreur dans l'UI sans recharger la page.
             kpiCards.forEach(function (id) {
                 var el = document.getElementById(id);
                 if (el && el.closest('.kpi-card')) el.closest('.kpi-card').classList.remove('kpi-loading');
             });
 
+            // ✅ MISSION 3 SPRINT 4 : Afficher l'erreur PHP/SQL réelle dans le popup
+            var errMessage = (err && err.message) ? String(err.message) : 'Erreur inconnue.';
+
             if (statusBox && statusText) {
-                statusText.textContent = 'Erreur de filtre AJAX. Rechargement de la page...';
+                statusText.textContent = '⚠️ ' + errMessage;
                 statusBox.classList.remove('d-none');
+                statusBox.classList.add('text-warning');
             }
 
-            var redirect = appBasePath() + '?page=rapportage';
-            var hasParams = String(params || '').trim() !== '';
-            if (hasParams) {
-                redirect = appBasePath() + '?' + String(params || '');
-            }
-            if (isReset) {
-                redirect = appBasePath() + '?page=rapportage';
+            if (window.Swal && typeof window.Swal.fire === 'function') {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Erreur de filtre',
+                    html: '<p>Impossible de charger les données filtrées.</p>' +
+                          '<pre style="text-align:left;font-size:0.75rem;max-height:200px;overflow:auto;background:#f1f5f9;padding:10px;border-radius:6px;margin-top:8px;">' +
+                          errMessage.replace(/</g, '&lt;').replace(/>/g, '&gt;') +
+                          '</pre>',
+                    confirmButtonText: 'OK',
+                    confirmButtonColor: '#e74c3c'
+                });
             }
 
-            window.setTimeout(function () {
-                window.location.assign(redirect);
-            }, 250);
-            console.error('[SyDRA] Filtre hub erreur:', err);
+            console.error('[SyDRA] Filtre hub erreur (sans rechargement):', err);
+        })
+        .finally(function () {
+            // Libération du verrou anti-boucle après chaque appel (succès ou échec).
+            _filterInProgress = false;
         });
     }
 

@@ -5,6 +5,7 @@ require __DIR__ . '/partials/report_header.php';
 ?>
 <div class="card">
     <h1>Liste des rapports</h1>
+    <div class="table-responsive">
     <table class="table">
         <thead>
         <tr>
@@ -29,4 +30,5 @@ require __DIR__ . '/partials/report_header.php';
         <?php endforeach; ?>
         </tbody>
     </table>
+    </div><!-- /table-responsive -->
 </div>

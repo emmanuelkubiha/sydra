@@ -94,6 +94,7 @@ if (!function_exists('field_info_tip')) {
         </div>
     </div>
 
+    <div class="table-responsive">
     <table class="table table-users" id="users-table">
         <thead>
         <tr>
@@ -247,6 +248,7 @@ if (!function_exists('field_info_tip')) {
         <?php endforeach; ?>
         </tbody>
     </table>
+    </div><!-- /table-responsive -->
 </div>
 
 <div class="modal fade" id="addUserModal" tabindex="-1" aria-hidden="true">

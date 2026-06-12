@@ -2,13 +2,14 @@
 
 ## Version et suivi
 
-- Version courante: `v0.9.2`
-- Derniere mise a jour: `2026-06-07`
+- Version courante: `v0.9.3`
+- Derniere mise a jour: `2026-06-12`
 - Canal: `main`
 - Historique complet des versions: voir `CHANGELOG.md`
 
 Historique rapide:
 
+- `v0.9.3` (2026-06-12): Sprint 4 — correction viewport/zoom, responsivite tables, fix chevauchement timeline, erreur filtre PHP visible a l'ecran, chatbot IA personnalise (nom utilisateur, avertissement securite contextuel, smart chips Wizard/IA/Rapports, memoire sessionStorage).
 - `v0.9.2` (2026-06-07): integration du widget IA global securise (offcanvas), routage Zero Data Leak par page (GENERIC_HELP/DRAFTING/ANALYSIS), analyse serveur basee sur report_id avec codification obligatoire, suppression du contexte incident envoye par le client.
 - `v0.9.0` (2026-06-06): durcissement workflow de decision (JSON robuste, warning SMTP), verrouillage/reouverture de decision, corrections redirections login/session, guide de deploiement production enrichi.
 

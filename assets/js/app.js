@@ -1,3 +1,41 @@
+// 1. Configuration globale de Toastr pour les petites notifications
+if (typeof toastr !== 'undefined') {
+    toastr.options = {
+        "closeButton": true,
+        "debug": false,
+        "newestOnTop": true,
+        "progressBar": true,
+        "positionClass": "toast-top-right",
+        "preventDuplicates": false,
+        "showDuration": "300",
+        "hideDuration": "1000",
+        "timeOut": "4000",
+        "extendedTimeOut": "1000",
+        "showEasing": "swing",
+        "hideEasing": "linear",
+        "showMethod": "fadeIn",
+        "hideMethod": "fadeOut"
+    };
+}
+
+// 2. Mixin SweetAlert2 pour les Modales de confirmation / Erreurs bloquantes
+window.premiumAlert = (typeof Swal !== 'undefined') ? Swal.mixin({
+    customClass: {
+        popup: 'sydra-swal-popup',
+        title: 'sydra-swal-title',
+        htmlContainer: 'sydra-swal-text',
+        confirmButton: 'btn btn-primary rounded-pill px-4 mx-2',
+        cancelButton: 'btn btn-outline-secondary rounded-pill px-4 mx-2'
+    },
+    buttonsStyling: false, // On désactive le style moche par défaut pour utiliser Bootstrap
+    showClass: {
+        popup: 'animate__animated animate__fadeInUp animate__faster'
+    },
+    hideClass: {
+        popup: 'animate__animated animate__fadeOutDown animate__faster'
+    }
+}) : null;
+
 document.addEventListener('DOMContentLoaded', function () {
     var appLoader = document.getElementById('app-loader');
     var loaderSubtitle = document.getElementById('app-loader-subtitle');

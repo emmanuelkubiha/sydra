@@ -165,6 +165,7 @@ $canEditOrDelete = static function (string $status): bool {
     </div>
 
     <!-- Tableau principal des alertes avec métadonnées data-* pour le filtrage client. -->
+    <div class="table-responsive">
     <table class="table table-users" id="rapportage-user-table">
         <thead>
         <tr>
@@ -252,6 +253,7 @@ $canEditOrDelete = static function (string $status): bool {
         <?php endforeach; ?>
         </tbody>
     </table>
+    </div><!-- /table-responsive -->
 
     <p id="rapportage-empty-state" class="text-muted mt-3 mb-0 d-none">
         Aucun résultat ne correspond aux filtres sélectionnés.

@@ -1877,3 +1877,113 @@ small.muted { color: var(--text-muted); }
         padding-right: 8px !important;
     }
 }
+
+/* ============================================================
+   CORRECTIFS RESPONSIVITÉ MOBILE — ANTIGRAVITY SPRINT 4
+   Permet le zoom utilisateur sur les pages lourdes (tableaux).
+   overflow-x: clip empêche le scroll horizontal parasite du body
+   tout en permettant le scroll interne des .table-responsive.
+   ============================================================ */
+html, body {
+    max-width: 100%;
+    overflow-x: clip;
+}
+
+/* Tables : scroll horizontal indépendant sur mobile */
+.table-responsive,
+.table-responsive-auto {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 768px) {
+    /* Empêche le zoom automatique iOS sur focus des inputs */
+    input[type="text"],
+    input[type="email"],
+    input[type="password"],
+    input[type="search"],
+    input[type="number"],
+    input[type="tel"],
+    input[type="url"],
+    input[type="date"],
+    textarea,
+    select {
+        font-size: 16px !important;
+    }
+}
+
+/* ============================================================
+   CORRECTIF TIMELINE — CHEVAUCHEMENT (MISSION 2 SPRINT 4)
+   Force un espacement clair entre les éléments de la timeline
+   sur la page rapportage-details pour éviter la superposition.
+   ============================================================ */
+.rapportage-timeline li {
+    position: relative;
+    display: flex;
+    gap: 10px;
+    padding: 0 0 1.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.rapportage-timeline li:last-child {
+    padding-bottom: 0;
+    margin-bottom: 0;
+}
+
+.rapportage-timeline li .timeline-content,
+.rapportage-timeline li > div:not(.rapportage-timeline-dot) {
+    flex: 1;
+    min-width: 0;
+    padding: 10px 14px;
+    background: #f8fbff;
+    border: 1px solid #dbeafe;
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   CORRECTION Z-INDEX : CARTE LEAFLET VS EN-TÊTE
+   ════════════════════════════════════════════════════════════════ */
+
+/* Force l'en-tête principal à toujours rester au-dessus de tout (y compris la carte) */
+.topbar-adminlte {
+    z-index: 1050 !important;
+}
+
+/* Rabaisse le niveau des conteneurs Leaflet pour qu'ils passent sous la navbar lors du scroll */
+.leaflet-container {
+    z-index: 10 !important;
+}
+
+/* ============================================================
+   STYLE SAAS PREMIUM (ALERTS & TOASTS)
+   ============================================================ */
+
+/* -- Style pour SweetAlert2 (Modales premium) -- */
+.sydra-swal-popup {
+    border-radius: 16px !important;
+    box-shadow: 0 15px 40px rgba(0,0,0,0.12) !important;
+    padding: 2rem !important;
+    max-width: 400px !important; /* Rend la modale plus fine et élégante */
+    font-family: 'Inter', 'Poppins', sans-serif !important;
+}
+
+.sydra-swal-title {
+    font-size: 1.25rem !important;
+    font-weight: 600 !important;
+    color: #2b3440 !important;
+}
+
+.sydra-swal-text {
+    font-size: 0.95rem !important;
+    color: #6b7280 !important;
+}
+
+/* -- Style pour Toastr (Notifications discrètes) -- */
+#toast-container > div {
+    border-radius: 12px !important;
+    box-shadow: 0 8px 25px rgba(0,0,0,0.1) !important;
+    opacity: 1 !important;
+    font-family: 'Inter', 'Poppins', sans-serif !important;
+    padding: 15px 15px 15px 50px !important;
+}

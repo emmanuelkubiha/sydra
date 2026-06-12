@@ -132,6 +132,7 @@ $statusClass = static function (string $status): string {
         </div>
     </div>
 
+    <div class="table-responsive">
     <table
         class="table table-users"
         id="rapportage-admin-table"
@@ -194,6 +195,7 @@ $statusClass = static function (string $status): string {
         <?php endforeach; ?>
         </tbody>
     </table>
+    </div><!-- /table-responsive -->
 
     <p id="rapportage-admin-empty-state" class="text-muted mt-3 mb-0 d-none">
         Aucun résultat ne correspond aux filtres sélectionnés.

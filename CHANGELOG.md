@@ -2,6 +2,20 @@
 
 Tous les changements notables du projet SyDRA sont documentés ici.
 
+## v0.9.3 - 2026-06-12
+
+### Correctifs (Sprint 4 — Antigravity)
+- **Viewport** : Remplacement de la balise viewport restrictive (`maximum-scale=1.0, user-scalable=no`) par la version standard, permettant le zoom sur les pages à données lourdes (tableaux, rapports).
+- **Responsivité tables** : Remplacement de `overflow-x: hidden` sur body/html par `overflow-x: clip`. Les conteneurs `.table-responsive` scrollent désormais horizontalement de manière indépendante sans couper la page.
+- **Timeline (rapportage-details)** : Correction du chevauchement des éléments avec `margin-bottom: 1.5rem`, padding et box propres pour chaque bloc.
+- **Filtre (applyFilter)** : Le popup SweetAlert2 affiche désormais l'erreur PHP/SQL brute (via `<pre>`) au lieu du message générique, permettant un débogage direct à l'écran.
+
+### Améliorations IA (Chatbot)
+- **Message d'accueil personnalisé** : L'assistant salue l'utilisateur par son nom (injecté via PHP/sessionStorage) avec un message aléatoire parmi 5 variantes.
+- **Avertissement de sécurité contextuel** : Si l'utilisateur n'est pas sur une page de rapportage (wizard, IA, détails), un avertissement 🔒 est ajouté au message d'accueil.
+- **Smart Chips enrichis** : Trois boutons cliquables — 📝 Créer via le Wizard, ✨ Créer avec l'IA, 📋 Voir mes rapports — affichés dans la bulle d'accueil en mode Aide Générale.
+- **Persistance mémoire** : Sauvegarde systématique dans `sessionStorage` après chaque message (utilisateur et assistant), rechargement au changement de page.
+
 ## v0.9.2 - 2026-06-07
 
 ### Ajouts

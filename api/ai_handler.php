@@ -295,85 +295,204 @@ function get_report_context(PDO $pdo, int $reportId): array
 
 function call_ai_provider(string $provider, string $apiKey, array $messages): array
 {
+    // =================================================================
+    // MISSION 3 : Fournisseurs IA pris en charge + codes d'erreur typés
+    // =================================================================
     $endpoint = '';
-    $model = '';
+    $model    = '';
 
     if ($provider === 'openai') {
         $endpoint = 'https://api.openai.com/v1/chat/completions';
-        $model = 'gpt-4o';
-    } elseif ($provider === 'xai') {
-        $endpoint = 'https://api.x.ai/v1/chat/completions';
-        $model = 'grok-3';
+        $model    = 'gpt-4o';
+    } elseif ($provider === 'groq') {
+        // Groq utilise l'API compatible OpenAI sur son propre endpoint.
+        $endpoint = 'https://api.groq.com/openai/v1/chat/completions';
+        $model    = 'llama-3.1-8b-instant'; // Modèle mis à jour — llama3-8b-8192 décommissionné
     } else {
-        return ['ok' => false, 'message' => 'Fournisseur IA non supporte.'];
+        return [
+            'ok'         => false,
+            'error_code' => 'unknown_provider',
+            'message'    => 'Fournisseur IA non supporté : ' . $provider,
+        ];
     }
 
     $body = [
-        'model' => $model,
-        'messages' => $messages,
+        'model'       => $model,
+        'messages'    => $messages,
         'temperature' => 0.3,
     ];
 
     $jsonBody = json_encode($body, JSON_UNESCAPED_UNICODE);
     if (!is_string($jsonBody)) {
-        return ['ok' => false, 'message' => 'Impossible de serialiser la requete IA.'];
+        return [
+            'ok'         => false,
+            'error_code' => 'serialization_error',
+            'message'    => 'Impossible de sérialiser la requête IA.',
+        ];
     }
 
     $ch = curl_init($endpoint);
     curl_setopt_array($ch, [
-        CURLOPT_POST => true,
+        CURLOPT_POST           => true,
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER => [
+        CURLOPT_HTTPHEADER     => [
             'Content-Type: application/json',
             'Authorization: Bearer ' . $apiKey,
         ],
-        CURLOPT_POSTFIELDS => $jsonBody,
-        CURLOPT_TIMEOUT => 45,
+        CURLOPT_POSTFIELDS     => $jsonBody,
+        CURLOPT_TIMEOUT        => 45,
         CURLOPT_CONNECTTIMEOUT => 15,
+        CURLOPT_SSL_VERIFYPEER => true,
     ]);
 
     $responseBody = curl_exec($ch);
-    $curlError = curl_error($ch);
-    $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError    = curl_error($ch);
+    $httpCode     = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
-    if (!is_string($responseBody)) {
-        return ['ok' => false, 'message' => 'Reponse vide du fournisseur IA.'];
-    }
-
-    if ($curlError !== '') {
-        return ['ok' => false, 'message' => 'Erreur cURL: ' . $curlError];
+    // Erreur réseau cURL (pas de réponse HTTP)
+    if (!is_string($responseBody) || $curlError !== '') {
+        return [
+            'ok'         => false,
+            'error_code' => 'network_error',
+            'message'    => 'Erreur réseau : ' . ($curlError ?: 'Réponse vide du fournisseur IA.'),
+        ];
     }
 
     $decoded = json_decode($responseBody, true);
     if (!is_array($decoded)) {
-        return ['ok' => false, 'message' => 'Reponse JSON invalide du fournisseur IA.'];
+        return [
+            'ok'         => false,
+            'error_code' => 'invalid_json',
+            'message'    => 'Réponse JSON invalide du fournisseur IA.',
+        ];
     }
 
+    // --- Mapping des codes d'erreur HTTP => codes typiques ---
     if ($httpCode < 200 || $httpCode >= 300) {
-        $apiError = '';
-        if (isset($decoded['error']['message'])) {
-            $apiError = (string) $decoded['error']['message'];
+        $apiError = trim((string) ($decoded['error']['message'] ?? ''));
+
+        if ($httpCode === 429) {
+            $errorCode = 'rate_limit';
+            $msg = $apiError ?: 'Limite de requêtes IA atteinte. Veuillez patienter quelques secondes.';
+        } elseif (in_array($httpCode, [401, 403], true)) {
+            $errorCode = 'auth_error';
+            $msg = $apiError ?: 'Clé API invalide ou non autorisée (HTTP ' . $httpCode . ').';
+        } elseif (in_array($httpCode, [500, 502, 503, 504], true)) {
+            $errorCode = 'server_error';
+            $msg = $apiError ?: 'Erreur serveur du fournisseur IA (HTTP ' . $httpCode . '). Veuillez réessayer.';
+        } else {
+            $errorCode = 'provider_error';
+            $msg = $apiError ?: 'Erreur inattendue du fournisseur IA (HTTP ' . $httpCode . ').';
         }
-        return ['ok' => false, 'message' => $apiError !== '' ? $apiError : ('Erreur HTTP IA ' . $httpCode)];
+
+        return [
+            'ok'         => false,
+            'error_code' => $errorCode,
+            'http_code'  => $httpCode,
+            'message'    => $msg,
+        ];
     }
 
     $content = trim((string) ($decoded['choices'][0]['message']['content'] ?? ''));
     if ($content === '') {
-        return ['ok' => false, 'message' => 'Le fournisseur IA n\'a retourne aucun contenu.'];
+        return [
+            'ok'         => false,
+            'error_code' => 'empty_response',
+            'message'    => 'Le fournisseur IA n\'a retourné aucun contenu.',
+        ];
     }
 
     return [
-        'ok' => true,
+        'ok'       => true,
         'provider' => $provider,
-        'model' => $model,
-        'content' => $content,
-        'raw' => $decoded,
+        'model'    => $model,
+        'content'  => $content,
+        'raw'      => $decoded,
     ];
 }
 
 $userId = (int) $_SESSION['auth_user_id'];
 $role = get_user_role($pdo, $userId);
+$userOrgId = 0;
+
+// ════════════════════════════════════════════════════════════════════════════
+// MISSION 1 : Récupération de l'organisation de l'utilisateur connecté
+// ════════════════════════════════════════════════════════════════════════════
+try {
+    $orgStmt = $pdo->prepare('SELECT COALESCE(organization_id, 0) FROM users WHERE id = :id LIMIT 1');
+    $orgStmt->execute(['id' => $userId]);
+    $userOrgId = (int) $orgStmt->fetchColumn();
+} catch (Throwable $e) {
+    $userOrgId = 0;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MISSION 1 : Contacts d'urgence (GTMP_LEAD + GTMP_COLEAD)
+// ════════════════════════════════════════════════════════════════════════════
+$leadContact = 'Non disponible';
+$coleadContact = 'Non disponible';
+try {
+    $contactStmt = $pdo->query(
+        'SELECT u.full_name, u.email, UPPER(COALESCE(r.code, "")) AS role_code
+         FROM users u
+         LEFT JOIN roles r ON r.id = u.role_id
+         WHERE UPPER(COALESCE(r.code, "")) IN ("GTMP_LEAD", "LEAD_GTMP", "GTMP_COLEAD")
+         AND u.statut = "Actif"
+         ORDER BY r.code
+         LIMIT 10'
+    );
+    $contacts = $contactStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    foreach ($contacts as $c) {
+        $name = trim((string) ($c['full_name'] ?? ''));
+        $email = trim((string) ($c['email'] ?? ''));
+        $rCode = strtoupper(trim((string) ($c['role_code'] ?? '')));
+        $info = $name . ($email !== '' ? ' (' . $email . ')' : '');
+        if (in_array($rCode, ['GTMP_LEAD', 'LEAD_GTMP'], true) && $leadContact === 'Non disponible') {
+            $leadContact = $info;
+        }
+        if ($rCode === 'GTMP_COLEAD' && $coleadContact === 'Non disponible') {
+            $coleadContact = $info;
+        }
+    }
+} catch (Throwable $e) {
+    // Fallback silencieux
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MISSION 1 : Statistiques dynamiques selon le rôle
+// ════════════════════════════════════════════════════════════════════════════
+$statsContext = '';
+$isDecisionRole = in_array($role, ['ADMIN', 'CLUSTER_LEADER', 'LEAD_GTMP', 'GTMP_LEAD', 'GTMP_COLEAD'], true);
+
+try {
+    if ($isDecisionRole) {
+        // Admin/Lead : nombre global d'alertes en attente de validation
+        $statsStmt = $pdo->query(
+            "SELECT COUNT(*) FROM reports
+             WHERE LOWER(REPLACE(REPLACE(COALESCE(workflow_status, ''), 'é', 'e'), 'è', 'e'))
+                   IN ('soumis', 'submitted', 'en revue', 'under_review')"
+        );
+        $pendingCount = (int) $statsStmt->fetchColumn();
+        $statsContext = "Il y a actuellement " . $pendingCount . " alerte(s) globale(s) en attente de validation par le Cluster.";
+    } else {
+        // Rapporteur : ses propres alertes par statut
+        $statsStmt = $pdo->prepare(
+            "SELECT
+                SUM(CASE WHEN LOWER(COALESCE(workflow_status, '')) IN ('brouillon', 'draft') THEN 1 ELSE 0 END) AS brouillons,
+                SUM(CASE WHEN LOWER(COALESCE(workflow_status, '')) IN ('soumis', 'submitted') THEN 1 ELSE 0 END) AS soumises
+             FROM reports
+             WHERE user_id = :uid OR (organization_id = :oid AND :oid > 0)"
+        );
+        $statsStmt->execute(['uid' => $userId, 'oid' => $userOrgId]);
+        $row = $statsStmt->fetch(PDO::FETCH_ASSOC);
+        $brouillons = (int) ($row['brouillons'] ?? 0);
+        $soumises = (int) ($row['soumises'] ?? 0);
+        $statsContext = "Le rapporteur a actuellement " . $brouillons . " alerte(s) en brouillon et " . $soumises . " alerte(s) soumise(s) en attente de validation.";
+    }
+} catch (Throwable $e) {
+    $statsContext = 'Statistiques indisponibles.';
+}
 
 $action = strtolower(trim((string) ($payload['action'] ?? 'chat')));
 $requestedMode = strtoupper(trim((string) ($payload['mode'] ?? '')));
@@ -391,7 +510,6 @@ if (!in_array($mode, ['GENERIC_HELP', 'DRAFTING', 'ANALYSIS'], true)) {
     }
 }
 
-$isDecisionRole = in_array($role, ['ADMIN', 'CLUSTER_LEADER', 'LEAD_GTMP', 'GTMP_LEAD'], true);
 if ($mode === 'ANALYSIS' && !$isDecisionRole) {
     http_response_code(403);
     echo json_encode(['ok' => false, 'message' => 'Acces reserve aux roles de decision.']);
@@ -399,19 +517,25 @@ if ($mode === 'ANALYSIS' && !$isDecisionRole) {
 }
 
 $settings = get_system_settings($pdo);
-$provider = strtolower(trim((string) ($settings['active_ai_provider'] ?? env_trim(['ACTIVE_AI_PROVIDER', 'AI_PROVIDER', 'XAI_PROVIDER']))));
-if (!in_array($provider, ['openai', 'xai'], true)) {
-    $provider = 'xai';
+$provider = strtolower(trim((string) ($settings['active_ai_provider'] ?? env_trim(['ACTIVE_AI_PROVIDER', 'AI_PROVIDER']))));
+// Groq est le fournisseur par défaut (gratuit, rapide, fiable).
+if (!in_array($provider, ['openai', 'groq'], true)) {
+    $provider = 'groq';
 }
 
 $apiKeyByProvider = [
     'openai' => trim((string) ($settings['openai_api_key'] ?? env_trim(['OPENAI_API_KEY', 'AI_OPENAI_API_KEY']))),
-    'xai' => trim((string) ($settings['xai_api_key'] ?? env_trim(['XAI_API_KEY', 'AI_XAI_API_KEY']))),
+    'groq'   => trim((string) ($settings['groq_api_key']   ?? env_trim(['GROQ_API_KEY',   'AI_GROQ_API_KEY']))),
 ];
 $apiKey = $apiKeyByProvider[$provider] ?? '';
 if ($apiKey === '') {
     http_response_code(503);
-    echo json_encode(['ok' => false, 'message' => 'Cle API manquante pour le fournisseur actif.']);
+    echo json_encode([
+        'ok'         => false,
+        'success'    => false,
+        'error_code' => 'missing_api_key',
+        'message'    => 'Clé API manquante pour le fournisseur actif (' . $provider . ').',
+    ]);
     exit;
 }
 
@@ -429,11 +553,18 @@ if ($mode === 'ANALYSIS') {
 }
 $safeAnalysisContext = apply_codification_deep($analysisContext, $rules);
 
+// ════════════════════════════════════════════════════════════════════════════
+// MISSION 2 : Le System Prompt Ultime (Strict & Formaté)
+// ════════════════════════════════════════════════════════════════════════════
 $systemPrompt = '';
 if ($mode === 'GENERIC_HELP') {
-    $systemPrompt = 'Tu es l\'assistant SyDRA. Tu n\'as accès à aucune donnée du système sur cette page. '
-        . 'Ton seul rôle est d\'expliquer brièvement comment utiliser le système ou inviter l\'utilisateur à aller sur la page de création d\'alerte. '
-        . 'Ne réponds à aucune question sur des incidents réels.';
+    $systemPrompt = "Tu es l'Assistant IA de SyDRA. RÈGLES STRICTES DE FORMATAGE ET DE COMPORTEMENT : \n"
+        . "1. UTILISE TOUJOURS des balises HTML <p> pour séparer tes paragraphes et <br> pour les retours à la ligne. Tes textes doivent être aérés et faciles à lire.\n"
+        . "2. Ne crée jamais de gros boutons. Utilise exclusivement ces classes Bootstrap pour tes boutons d'action : <a href='...' class='btn btn-sm btn-outline-primary rounded-pill d-inline-block m-1 px-3 py-1' style='font-size: 0.85rem;'>Texte</a>.\n"
+        . "3. Contacts d'urgence : Ne donne les contacts du Lead (" . $leadContact . ") et Co-Lead (" . $coleadContact . ") QUE SI l'utilisateur te demande explicitement 'qui contacter' ou 'j'ai un problème'. NE LES AJOUTE JAMAIS à la fin de tes autres réponses.\n"
+        . "4. Voici l'état actuel des données de cet utilisateur : " . $statsContext . " Tu es autorisé à donner ces chiffres exacts à l'utilisateur s'il te pose des questions sur ses alertes ou les alertes en attente.\n"
+        . "5. Reste concis, direct et professionnel.\n"
+        . "6. RÈGLES DE FORMATAGE DE TEXTE : INTERDICTION FORMELLE d'utiliser le formatage Markdown. Ne génère JAMAIS d'astérisques (** ou *) ni de tirets (-) pour tes listes. Si tu dois faire une liste, utilise EXCLUSIVEMENT les balises HTML <ul> et <li>. Si tu dois mettre un mot en valeur, utilise la balise HTML <strong class='text-primary'>mot</strong>.";
 } elseif ($mode === 'DRAFTING' && $action === 'generate_structured') {
     $systemPrompt = 'Tu es un assistant de structuration d\'alerte. '
         . 'Retourne uniquement un JSON valide sans markdown ni texte additionnel, selon ce schema exact: '
@@ -444,14 +575,22 @@ if ($mode === 'GENERIC_HELP') {
         . 'Objectif: aider l\'agent a collecter les informations manquantes pour une alerte de protection. '
         . 'Pose des questions courtes, une a la fois, jusqu\'a obtenir: contexte, localisation, type d\'incident, victimes, menages deplaces, analyse, besoins prioritaires, recommandations. '
         . 'Quand les informations semblent suffisantes, ajoute a la fin de ta reponse le marqueur [[READY_TO_GENERATE]]. '
-        . 'Reste factuel et professionnel.';
+        . 'Reste factuel et professionnel.'
+        . "\n\nStatistiques utilisateur : " . $statsContext;
 } elseif ($mode === 'ANALYSIS') {
-    $systemPrompt = 'Tu es un conseiller IA pour un Lead GTMP. '
-        . 'Tu dois analyser uniquement le contexte codifie de l\'alerte courante. '
-        . 'N\'utilise aucune connaissance externe non necessaire. '
-        . 'Fournis des reponses operationnelles, concises et actionnables.';
+    $systemPrompt = "Tu es un conseiller IA pour un Lead GTMP. \n"
+        . "Tu dois analyser uniquement le contexte codifié de l'alerte courante. \n"
+        . "N'utilise aucune connaissance externe non nécessaire. \n"
+        . "Fournis des réponses opérationnelles, concises et actionnables. \n"
+        . "RÈGLES DE FORMATAGE : UTILISE TOUJOURS des balises HTML <p> et <br>. Utilise les classes Bootstrap pour les boutons (<a href='...' class='btn btn-sm btn-outline-primary rounded-pill d-inline-block m-1 px-3 py-1' style='font-size: 0.85rem;'>Texte</a>).\n"
+        . "RÈGLES DE FORMATAGE DE TEXTE : INTERDICTION FORMELLE d'utiliser le formatage Markdown. Ne génère JAMAIS d'astérisques (** ou *) ni de tirets (-) pour tes listes. Si tu dois faire une liste, utilise EXCLUSIVEMENT les balises HTML <ul> et <li>. Si tu dois mettre un mot en valeur, utilise la balise HTML <strong class='text-primary'>mot</strong>.\n"
+        . "\nStatistiques globales : " . $statsContext
+        . "\nContacts : Lead GTMP = " . $leadContact . " | Co-Lead = " . $coleadContact;
 } else {
-    $systemPrompt = 'Tu es un assistant IA SyDRA utile, factuel et concis.';
+    $systemPrompt = 'Tu es un assistant IA SyDRA utile, factuel et concis. '
+        . "UTILISE TOUJOURS des balises HTML <p> et <br> pour aérer tes textes. "
+        . "INTERDICTION FORMELLE d'utiliser le formatage Markdown (** ou -). Utilise <ul>, <li> et <strong class='text-primary'>.\n"
+        . "\n" . $statsContext;
 }
 
 $preparedMessages = [['role' => 'system', 'content' => $systemPrompt]];
@@ -469,18 +608,29 @@ foreach ($messages as $message) {
 
 $result = call_ai_provider($provider, $apiKey, $preparedMessages);
 if (($result['ok'] ?? false) !== true) {
-    http_response_code(502);
+    // Mapping error_code => code HTTP pour les erreurs typées
+    $errorCode = (string) ($result['error_code'] ?? 'provider_error');
+    $httpStatus = match ($errorCode) {
+        'rate_limit'   => 429,
+        'auth_error'   => 502,
+        'server_error' => 503,
+        default        => 502,
+    };
+    http_response_code($httpStatus);
     echo json_encode([
-        'ok' => false,
-        'message' => (string) ($result['message'] ?? 'Erreur IA.'),
-    ]);
+        'ok'         => false,
+        'success'    => false,
+        'error_code' => $errorCode,
+        'message'    => (string) ($result['message'] ?? 'Erreur IA.'),
+    ], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
 echo json_encode([
-    'ok' => true,
-    'mode' => $mode,
+    'ok'       => true,
+    'success'  => true,
+    'mode'     => $mode,
     'provider' => (string) ($result['provider'] ?? $provider),
-    'model' => (string) ($result['model'] ?? ''),
-    'message' => (string) ($result['content'] ?? ''),
+    'model'    => (string) ($result['model'] ?? ''),
+    'message'  => (string) ($result['content'] ?? ''),
 ], JSON_UNESCAPED_UNICODE);
