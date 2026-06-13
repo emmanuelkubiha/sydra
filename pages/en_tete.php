@@ -30,7 +30,14 @@ if (isset($pdo) && $pdo instanceof PDO && $sessionUserId > 0) {
             $countStmt->execute(['uid' => $sessionUserId]);
             $notifCount = (int) $countStmt->fetchColumn();
 
-            $listSql = 'SELECT n.id, n.title, n.message, n.target_url, n.created_at
+            $selectFields = ['n.id', 'n.title', 'n.message', 'n.target_url', 'n.created_at'];
+            if ($hasIsRead) {
+                $selectFields[] = 'n.is_read';
+            }
+            if ($hasReadAt) {
+                $selectFields[] = 'n.read_at';
+            }
+            $listSql = 'SELECT ' . implode(', ', $selectFields) . '
                         FROM notifications n
                         WHERE (n.user_id = :uid OR n.user_id IS NULL)
                         ORDER BY n.created_at DESC
@@ -69,7 +76,112 @@ if (isset($pdo) && $pdo instanceof PDO && is_array($authUser)) {
     }
 }
 
-$notifDisplayCount = max(0, $notifCount) + max(0, $pendingValidationCount);
+$actionableTasks = [];
+$isCoordinator = false;
+if (isset($pdo) && $pdo instanceof PDO && is_array($authUser)) {
+    $isCoordinator = in_array($roleCode, ['ADMIN', 'CLUSTER_LEADER', 'GTMP_LEAD', 'GTMP_COLEAD', 'CLUSTER_PROTECTION', 'LEAD_GTMP'], true);
+    $userId = (int) ($authUser['id'] ?? 0);
+    
+    try {
+        if ($isCoordinator) {
+            // Pour les coordinateurs : rapports soumis / en attente de validation
+            $taskStmt = $pdo->query('SELECT r.id, r.created_at, r.incident_title, r.location_text, r.workflow_status
+                                     FROM reports r
+                                     WHERE LOWER(REPLACE(REPLACE(REPLACE(COALESCE(r.workflow_status, ""), "é", "e"), "è", "e"), "ê", "e"))
+                                           IN ("soumis", "submitted", "en revue", "en revision", "under_review")
+                                     ORDER BY r.created_at DESC
+                                     LIMIT 5');
+            $coordinatorReports = $taskStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            foreach ($coordinatorReports as $rep) {
+                $actionableTasks[] = [
+                    'type' => 'coordination_pending',
+                    'id' => (int) $rep['id'],
+                    'title' => 'Validation requise',
+                    'message' => 'Rapport sur "' . ($rep['incident_title'] ?? 'Incident') . '" à ' . ($rep['location_text'] ?? 'lieu inconnu') . ' en attente de validation.',
+                    'target_url' => '?page=rapportage-voir&id=' . $rep['id'],
+                    'created_at' => $rep['created_at']
+                ];
+            }
+        } else {
+            // Pour les reporters : rapports avec demande d'informations (UNDER_REVIEW)
+            $userFk = 'owner_user_id';
+            $colCheck = $pdo->prepare('SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = "reports" AND COLUMN_NAME = :col');
+            $colCheck->execute(['col' => 'owner_user_id']);
+            if (!$colCheck->fetchColumn()) {
+                $colCheck->execute(['col' => 'reporter_user_id']);
+                if ($colCheck->fetchColumn()) {
+                    $userFk = 'reporter_user_id';
+                } else {
+                    $userFk = 'user_id';
+                }
+            }
+            
+            $taskStmt = $pdo->prepare('SELECT r.id, r.created_at, r.incident_title, r.location_text, r.workflow_status
+                                     FROM reports r
+                                     WHERE r.' . $userFk . ' = :uid
+                                       AND LOWER(REPLACE(REPLACE(REPLACE(COALESCE(r.workflow_status, ""), "é", "e"), "è", "e"), "ê", "e"))
+                                           IN ("en revue", "en revision", "under_review")
+                                     ORDER BY r.created_at DESC
+                                     LIMIT 5');
+            $taskStmt->execute(['uid' => $userId]);
+            $userReportsUnderReview = $taskStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            foreach ($userReportsUnderReview as $rep) {
+                $actionableTasks[] = [
+                    'type' => 'info_request',
+                    'id' => (int) $rep['id'],
+                    'title' => 'Demande d\'informations',
+                    'message' => 'Des informations complémentaires sont requises pour votre rapport sur "' . ($rep['incident_title'] ?? 'Incident') . '".',
+                    'target_url' => '?page=rapportage-creer-wizar&id_brouillon=' . $rep['id'] . '&step=4',
+                    'created_at' => $rep['created_at']
+                ];
+            }
+        }
+    } catch (Throwable $e) {
+        // Fallback
+    }
+}
+
+// Liste finale unifiée pour l'affichage
+$displayNotifs = [];
+foreach ($actionableTasks as $task) {
+    $displayNotifs[] = [
+        'id' => 0,
+        'is_actionable' => true,
+        'type' => $task['type'],
+        'report_id' => $task['id'],
+        'title' => $task['title'],
+        'message' => $task['message'],
+        'target_url' => $task['target_url'],
+        'created_at' => $task['created_at'],
+        'is_read' => 0
+    ];
+}
+
+foreach (($notifItems ?? []) as $notif) {
+    $isDup = false;
+    if ($isCoordinator && stripos((string)($notif['title'] ?? ''), 'validation') !== false) {
+        $isDup = true;
+    }
+    if (!$isDup) {
+        $displayNotifs[] = [
+            'id' => (int) ($notif['id'] ?? 0),
+            'is_actionable' => false,
+            'type' => 'standard',
+            'title' => $notif['title'] ?? 'Notification',
+            'message' => $notif['message'] ?? '',
+            'target_url' => $notif['target_url'] ?? 'index.php?page=tableau_de_bord',
+            'created_at' => $notif['created_at'] ?? '',
+            'is_read' => isset($notif['is_read']) ? (int)$notif['is_read'] : (isset($notif['read_at']) && $notif['read_at'] !== null ? 1 : 0)
+        ];
+    }
+}
+
+$actionableTasksCount = count($actionableTasks);
+if ($isCoordinator) {
+    $notifDisplayCount = max(0, $notifCount) + max(0, $pendingValidationCount);
+} else {
+    $notifDisplayCount = max(0, $notifCount) + $actionableTasksCount;
+}
 
 $formatNotifDate = static function (string $raw): string {
     $ts = strtotime($raw);
@@ -198,41 +310,78 @@ if ($isAuth) {
             </div>
 
             <div class="topbar-right">
-                <form class="lang-switch" action="" method="get">
-                    <input type="hidden" name="page" value="<?= htmlspecialchars($loaderContext, ENT_QUOTES, 'UTF-8'); ?>">
-                    <select name="lang" aria-label="Language switcher" onchange="this.form.submit()">
-                        <option value="fr" <?= $lang === 'fr' ? 'selected' : ''; ?>>FR</option>
-                        <option value="en" <?= $lang === 'en' ? 'selected' : ''; ?>>EN</option>
-                    </select>
-                </form>
+
 
                 <div class="notif-wrapper" id="notif-wrapper">
-                    <button type="button" id="notif-toggle" class="notif-btn" aria-label="Notifications">
-                        <i class="bi bi-bell-fill"></i>
+                    <button type="button" id="notif-toggle" class="notif-btn<?= $notifDisplayCount > 0 ? ' notif-btn-alert' : ''; ?>" aria-label="Notifications">
+                        <i class="fa-solid fa-bell"></i>
                         <?php if ($notifDisplayCount > 0): ?>
                             <span class="notif-badge"><?= (int) $notifDisplayCount; ?></span>
                         <?php endif; ?>
                     </button>
                     <div class="notif-menu" id="notif-menu">
-                        <div class="notif-menu-head">Notifications recentes</div>
-                        <?php if ($notifItems === []): ?>
-                            <?php if ($pendingValidationCount > 0): ?>
-                                <a class="notif-item" href="?page=rapportage-coordination">
-                                    <strong>Validation requise</strong>
-                                    <span><?= (int) $pendingValidationCount; ?> rapport(s) en attente de validation.</span>
-                                    <em>Accéder à la coordination</em>
-                                </a>
-                            <?php else: ?>
-                                <div class="notif-item muted">Aucune notification.</div>
-                            <?php endif; ?>
+                        <div class="notif-menu-head">Notifications récentes</div>
+                        <?php if ($displayNotifs === []): ?>
+                            <div class="notif-empty">
+                                <div class="notif-empty-icon">
+                                    <i class="fa-regular fa-bell-slash"></i>
+                                </div>
+                                <h6 class="notif-empty-title">Aucune notification</h6>
+                                <p class="notif-empty-desc mb-0">Vous êtes à jour !</p>
+                            </div>
                         <?php else: ?>
-                            <?php foreach ($notifItems as $notif): ?>
-                                <a class="notif-item js-notif-item"
+                            <?php foreach ($displayNotifs as $notif): ?>
+                                <?php
+                                $notifTitle = (string) ($notif['title'] ?? 'Notification');
+                                $notifMessage = (string) ($notif['message'] ?? '');
+                                $isActionable = !empty($notif['is_actionable']);
+                                
+                                $iconClass = 'fa-solid fa-circle-info';
+                                $themeClass = 'notif-icon-circle-primary';
+                                
+                                if (($notif['type'] ?? '') === 'coordination_pending') {
+                                    $iconClass = 'fa-solid fa-file-signature';
+                                    $themeClass = 'notif-icon-circle-warning';
+                                } elseif (($notif['type'] ?? '') === 'info_request') {
+                                    $iconClass = 'fa-solid fa-circle-question';
+                                    $themeClass = 'notif-icon-circle-danger';
+                                } else {
+                                    $isWarning = stripos($notifTitle, 'validation') !== false || stripos($notifTitle, 'refus') !== false || stripos($notifTitle, 'annul') !== false;
+                                    $isDanger = stripos($notifTitle, 'supprim') !== false || stripos($notifTitle, 'erreur') !== false || stripos($notifTitle, 'alert') !== false;
+                                    if ($isWarning) {
+                                        $iconClass = 'fa-solid fa-triangle-exclamation';
+                                        $themeClass = 'notif-icon-circle-warning';
+                                    } elseif ($isDanger) {
+                                        $iconClass = 'fa-solid fa-circle-exclamation';
+                                        $themeClass = 'notif-icon-circle-danger';
+                                    }
+                                }
+
+                                $isUnread = (int)($notif['is_read'] ?? 0) === 0;
+                                ?>
+                                <a class="notif-item js-notif-item<?= $isActionable ? ' notif-item-actionable' : ''; ?><?= ($notif['type'] ?? '') === 'coordination_pending' ? ' notif-item-coordination' : ''; ?><?= ($notif['type'] ?? '') === 'info_request' ? ' notif-item-info-request' : ''; ?><?= $isUnread ? ' notif-item-unread' : ' notif-item-read'; ?>"
                                    data-notif-id="<?= (int) ($notif['id'] ?? 0); ?>"
                                    href="<?= htmlspecialchars((string) ($notif['target_url'] ?? 'index.php?page=tableau_de_bord'), ENT_QUOTES, 'UTF-8'); ?>">
-                                    <strong><?= htmlspecialchars((string) ($notif['title'] ?? 'Notification'), ENT_QUOTES, 'UTF-8'); ?></strong>
-                                    <span><?= htmlspecialchars((string) ($notif['message'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></span>
-                                    <em><?= htmlspecialchars($formatNotifDate((string) ($notif['created_at'] ?? '')), ENT_QUOTES, 'UTF-8'); ?></em>
+                                    <div class="notif-icon-circle <?= $themeClass; ?>">
+                                        <i class="<?= $iconClass; ?>"></i>
+                                    </div>
+                                    <div class="flex-grow-1">
+                                        <div class="d-flex align-items-center justify-content-between gap-1">
+                                            <strong class="notif-title"><?= htmlspecialchars($notifTitle, ENT_QUOTES, 'UTF-8'); ?></strong>
+                                            <?php if ($isActionable): ?>
+                                                <span class="badge bg-danger text-white px-2 py-0.5 rounded-pill" style="font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px;">Action</span>
+                                            <?php endif; ?>
+                                        </div>
+                                        <span class="notif-message"><?= htmlspecialchars($notifMessage, ENT_QUOTES, 'UTF-8'); ?></span>
+                                        <?php if ($isActionable): ?>
+                                            <span class="notif-action-link">Traiter le rapport <i class="fa-solid fa-arrow-right ms-1"></i></span>
+                                        <?php else: ?>
+                                            <span class="notif-date"><?= htmlspecialchars($formatNotifDate((string) ($notif['created_at'] ?? '')), ENT_QUOTES, 'UTF-8'); ?></span>
+                                        <?php endif; ?>
+                                    </div>
+                                    <?php if ($isUnread && !$isActionable): ?>
+                                        <span class="notif-unread-dot" title="Non lu"></span>
+                                    <?php endif; ?>
                                 </a>
                             <?php endforeach; ?>
                         <?php endif; ?>
@@ -277,13 +426,7 @@ if ($isAuth) {
         <img class="brand-logo-img" src="<?= htmlspecialchars($logoWhitePath, ENT_QUOTES, 'UTF-8'); ?>" alt="Logo SyDRA" height="40">
     </a>
 
-    <form class="lang-switch" action="" method="get">
-        <input type="hidden" name="page" value="<?= htmlspecialchars($loaderContext, ENT_QUOTES, 'UTF-8'); ?>">
-        <select name="lang" aria-label="Language switcher" onchange="this.form.submit()">
-            <option value="fr" <?= $lang === 'fr' ? 'selected' : ''; ?>>FR</option>
-            <option value="en" <?= $lang === 'en' ? 'selected' : ''; ?>>EN</option>
-        </select>
-    </form>
+
 </div>
 <div class="public-tagline">
     <span class="tagline-pill"><?= htmlspecialchars(t('intro.line1'), ENT_QUOTES, 'UTF-8'); ?></span>

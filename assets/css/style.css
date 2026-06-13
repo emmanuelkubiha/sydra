@@ -416,77 +416,253 @@ body {
 }
 
 .notif-btn {
-    width: 38px;
-    height: 38px;
-    border-radius: 999px;
-    margin-bottom: 0;
-    border: 1px solid #dbeafe;
-    background: #f8fafc;
-    color: #0f172a;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 1px solid #e2e8f0;
+    background: #ffffff;
+    color: #475569;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
+    padding: 0;
+}
+.notif-btn:hover {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+    color: #0f172a;
+}
+
+.notif-btn-alert {
+    color: #2563eb;
+    border-color: #dbeafe;
+    background: #eff6ff;
+}
+.notif-btn-alert:hover {
+    background: #dbeafe;
+    border-color: #bfdbfe;
+    color: #1d4ed8;
+}
+
+@keyframes bellRing {
+    0%, 100% { transform: rotate(0); }
+    10%, 30%, 50%, 70%, 90% { transform: rotate(8deg); }
+    20%, 40%, 60%, 80% { transform: rotate(-8deg); }
+}
+.notif-btn-alert i {
+    animation: bellRing 2.5s ease infinite;
+    display: inline-block;
 }
 
 .notif-badge {
     position: absolute;
-    right: -4px;
-    top: -4px;
+    right: -2px;
+    top: -2px;
     background: #ef4444;
-    color: #fff;
+    color: #ffffff;
     border-radius: 999px;
     min-width: 18px;
     height: 18px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 700;
+    border: 2px solid #ffffff;
+    animation: badgePulse 2s infinite;
+}
+
+@keyframes badgePulse {
+    0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+    70% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
 }
 
 .notif-menu {
     position: absolute;
     right: 0;
-    top: 46px;
-    width: 340px;
-    background: #fff;
-    border: 1px solid #dbe3ef;
-    border-radius: 10px;
-    box-shadow: 0 14px 30px rgba(15, 23, 42, .14);
-    display: none;
+    top: 52px;
+    width: 360px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+    z-index: 1050;
+    opacity: 0;
+    transform: translateY(10px) scale(0.95);
+    pointer-events: none;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     overflow: hidden;
+    display: block !important;
 }
 
 .notif-menu.open {
-    display: block;
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
 }
 
 .notif-menu-head {
-    padding: 10px 12px;
-    border-bottom: 1px solid #e2e8f0;
-    font-weight: 600;
+    padding: 14px 16px;
+    border-bottom: 1px solid #f1f5f9;
+    background: #f8fafc;
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .notif-item {
-    display: block;
+    display: flex;
     text-decoration: none;
-    color: #0f172a;
-    padding: 10px 12px;
+    color: #334155;
+    padding: 14px 16px;
     border-bottom: 1px solid #f1f5f9;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    align-items: start;
+    gap: 12px;
 }
-
-.notif-item strong,
-.notif-item span,
-.notif-item em {
-    display: block;
+.notif-item:last-child {
+    border-bottom: none;
 }
-
-.notif-item em {
-    margin-top: 4px;
-    font-size: 11px;
-    color: #64748b;
-}
-
 .notif-item:hover {
     background: #f8fafc;
+    color: #0f172a;
+}
+
+.notif-item-unread {
+    background-color: rgba(37, 99, 235, 0.02);
+}
+.notif-item-unread:hover {
+    background-color: rgba(37, 99, 235, 0.05);
+}
+.notif-item-unread .notif-title {
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.notif-item-read {
+    opacity: 0.65;
+}
+.notif-item-read:hover {
+    opacity: 1;
+    background-color: #f8fafc;
+}
+.notif-item-read .notif-icon-circle {
+    background-color: #f1f5f9 !important;
+    color: #94a3b8 !important;
+}
+
+.notif-unread-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #2563eb;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+    align-self: center;
+    flex-shrink: 0;
+}
+
+.notif-item-actionable {
+    position: relative;
+    cursor: pointer;
+}
+.notif-item-coordination {
+    background-color: rgba(245, 158, 11, 0.02);
+    border-left: 3px solid #f59e0b;
+}
+.notif-item-coordination:hover {
+    background-color: rgba(245, 158, 11, 0.06);
+}
+.notif-item-info-request {
+    background-color: rgba(239, 68, 68, 0.02);
+    border-left: 3px solid #ef4444;
+}
+.notif-item-info-request:hover {
+    background-color: rgba(239, 68, 68, 0.06);
+}
+
+.notif-icon-circle {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    flex-shrink: 0;
+}
+.notif-icon-circle-warning {
+    background-color: #fff7ed;
+    color: #f97316;
+}
+.notif-icon-circle-primary {
+    background-color: #eff6ff;
+    color: #3b82f6;
+}
+.notif-icon-circle-danger {
+    background-color: #fef2f2;
+    color: #ef4444;
+}
+
+.notif-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #1e293b;
+    display: block;
+    margin-bottom: 2px;
+}
+
+.notif-message {
+    font-size: 0.8rem;
+    color: #64748b;
+    display: block;
+    line-height: 1.4;
+}
+
+.notif-action-link {
+    font-size: 0.75rem;
+    color: #2563eb;
+    font-weight: 600;
+    display: block;
+    margin-top: 6px;
+}
+.notif-action-link i {
+    transition: transform 0.2s ease;
+}
+.notif-item:hover .notif-action-link i {
+    transform: translateX(3px);
+}
+
+.notif-date {
+    font-size: 0.725rem;
+    color: #94a3b8;
+    display: block;
+    margin-top: 6px;
+}
+
+.notif-empty {
+    padding: 36px 16px;
+    text-align: center;
+}
+.notif-empty-icon {
+    font-size: 2rem;
+    color: #cbd5e1;
+    margin-bottom: 12px;
+}
+.notif-empty-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #64748b;
+    margin-bottom: 4px;
+}
+.notif-empty-desc {
+    font-size: 0.8rem;
+    color: #94a3b8;
 }
 
 .container.full-width {
@@ -1085,7 +1261,7 @@ body {
     position: absolute;
     top: 0;
     bottom: 0;
-    left: 7px;
+    left: 16px;
     width: 2px;
     background: #bfdbfe;
 }
@@ -1102,15 +1278,42 @@ body {
 }
 
 .rapportage-timeline-dot {
-    width: 16px;
-    height: 16px;
-    border-radius: 999px;
-    border: 3px solid #dbeafe;
-    background: #005bbb;
-    margin-top: 3px;
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #dbe2ea;
+    background: #ffffff;
     flex: 0 0 auto;
     position: relative;
     z-index: 1;
+}
+
+.rapportage-timeline-dot i {
+    font-size: 0.95rem;
+}
+
+.timeline-dot-primary {
+    background: rgba(59, 130, 246, 0.15) !important;
+}
+
+.timeline-dot-success {
+    background: rgba(16, 185, 129, 0.14) !important;
+}
+
+.timeline-dot-danger {
+    background: rgba(239, 68, 68, 0.14) !important;
+}
+
+.timeline-dot-warning {
+    background: rgba(245, 158, 11, 0.18) !important;
+}
+
+.timeline-dot-secondary {
+    background: rgba(100, 116, 139, 0.15) !important;
 }
 
 .rapportage-decision-panel {
@@ -1956,34 +2159,154 @@ html, body {
 }
 
 /* ============================================================
-   STYLE SAAS PREMIUM (ALERTS & TOASTS)
+   STYLE SAAS PREMIUM — MODALES BOOTSTRAP 5
    ============================================================ */
 
-/* -- Style pour SweetAlert2 (Modales premium) -- */
+.modal-content {
+    border: none !important;
+    border-radius: 16px !important;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15) !important;
+    font-family: 'Inter', 'Poppins', sans-serif !important;
+    overflow: hidden;
+}
+
+.modal-header {
+    border-bottom: 1px solid #f3f4f6 !important;
+    padding: 1.25rem 1.5rem !important;
+}
+
+.modal-title {
+    font-size: 1.05rem !important;
+    font-weight: 600 !important;
+    color: #1f2937 !important;
+}
+
+.modal-body {
+    font-size: 0.9rem !important;
+    color: #4b5563 !important;
+    padding: 1.5rem !important;
+    line-height: 1.6;
+}
+
+.modal-footer {
+    border-top: 1px solid #f3f4f6 !important;
+    padding: 1rem 1.5rem !important;
+    background-color: #f9fafb !important;
+    border-bottom-left-radius: 16px !important;
+    border-bottom-right-radius: 16px !important;
+}
+
+.modal-footer .btn {
+    border-radius: 8px !important;
+    font-size: 0.875rem !important;
+    font-weight: 500 !important;
+    padding: 0.5rem 1.25rem !important;
+}
+
+/* ============================================================
+   STYLE SAAS PREMIUM — SWEETALERT2 (sélecteurs natifs)
+   Force le design même sans customClass mixin
+   ============================================================ */
+
+/* Popup principale */
+.swal2-popup {
+    border-radius: 16px !important;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.14) !important;
+    width: 380px !important;
+    padding: 1.75rem 1.5rem 1.5rem !important;
+    font-family: 'Inter', 'Poppins', sans-serif !important;
+}
+
+/* Titre */
+.swal2-title {
+    font-size: 1.1rem !important;
+    font-weight: 600 !important;
+    color: #111827 !important;
+    padding: 0 !important;
+    margin-top: 1.5rem !important;
+    margin-bottom: 0.8rem !important;
+    line-height: 1.4 !important;
+}
+
+/* Texte / body */
+.swal2-html-container,
+.swal2-content {
+    font-size: 0.875rem !important;
+    color: #6b7280 !important;
+    margin-top: 0 !important;
+    line-height: 1.55 !important;
+}
+
+/* Icône — réduite pour ne pas prendre tout l'espace */
+.swal2-icon {
+    width: 52px !important;
+    height: 52px !important;
+    margin: 0 auto 1.5rem !important;
+    font-size: 1.6rem !important;
+}
+.swal2-icon .swal2-icon-content {
+    font-size: 2rem !important;
+}
+
+/* Zone des boutons */
+.swal2-actions {
+    margin-top: 1.4rem !important;
+    gap: 8px !important;
+}
+
+/* Bouton confirmer */
+.swal2-confirm {
+    border-radius: 8px !important;
+    font-size: 0.875rem !important;
+    font-weight: 500 !important;
+    padding: 0.55rem 1.4rem !important;
+    letter-spacing: 0.01em !important;
+}
+
+/* Bouton annuler */
+.swal2-cancel {
+    border-radius: 8px !important;
+    font-size: 0.875rem !important;
+    font-weight: 500 !important;
+    padding: 0.55rem 1.4rem !important;
+}
+
+/* Classe personnalisée sydra-swal-popup (via mixin premiumAlert) */
 .sydra-swal-popup {
     border-radius: 16px !important;
-    box-shadow: 0 15px 40px rgba(0,0,0,0.12) !important;
-    padding: 2rem !important;
-    max-width: 400px !important; /* Rend la modale plus fine et élégante */
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.14) !important;
+    width: 380px !important;
+    padding: 1.75rem 1.5rem 1.5rem !important;
     font-family: 'Inter', 'Poppins', sans-serif !important;
 }
 
 .sydra-swal-title {
-    font-size: 1.25rem !important;
+    font-size: 1.1rem !important;
     font-weight: 600 !important;
-    color: #2b3440 !important;
+    color: #111827 !important;
+    line-height: 1.4 !important;
+    margin-top: 1.5rem !important;
+    margin-bottom: 0.8rem !important;
 }
 
 .sydra-swal-text {
-    font-size: 0.95rem !important;
+    font-size: 0.875rem !important;
     color: #6b7280 !important;
+    line-height: 1.55 !important;
 }
 
-/* -- Style pour Toastr (Notifications discrètes) -- */
+/* ============================================================
+   STYLE SAAS PREMIUM — TOASTR (Notifications discrètes)
+   ============================================================ */
+
 #toast-container > div {
     border-radius: 12px !important;
-    box-shadow: 0 8px 25px rgba(0,0,0,0.1) !important;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.10) !important;
     opacity: 1 !important;
     font-family: 'Inter', 'Poppins', sans-serif !important;
-    padding: 15px 15px 15px 50px !important;
+    padding: 14px 14px 14px 50px !important;
+    font-size: 0.875rem !important;
+    min-width: 280px !important;
+    max-width: 360px !important;
 }
+

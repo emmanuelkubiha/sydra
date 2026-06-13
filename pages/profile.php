@@ -20,151 +20,267 @@ if ($orgName !== '') {
     $second = isset($parts[1][0]) ? strtoupper((string) $parts[1][0]) : '';
     $orgInitials = ($first . $second) !== '' ? ($first . $second) : 'OG';
 }
+
+$currentLang = function_exists('current_lang') ? current_lang() : ($lang ?? 'fr');
 ?>
 
-<section class="profile-shell" id="profile-view">
-    <div class="card shadow-sm rounded-4 border-0 profile-hero-card">
-        <div class="profile-hero">
-            <div class="profile-hero-logo-wrap profile-org-logo-wrap-lg">
-            <?php if ($orgLogo !== ''): ?>
-                <img id="profile-org-logo-view" class="profile-org-logo rounded-4" src="<?= htmlspecialchars($orgLogo, ENT_QUOTES, 'UTF-8'); ?>" alt="Logo organisation">
-                <div id="profile-org-fallback-view" class="profile-org-fallback rounded-4 d-none"><?= htmlspecialchars($orgInitials, ENT_QUOTES, 'UTF-8'); ?></div>
-            <?php else: ?>
-                <div id="profile-org-fallback-view" class="profile-org-fallback rounded-4"><?= htmlspecialchars($orgInitials, ENT_QUOTES, 'UTF-8'); ?></div>
-                <img id="profile-org-logo-view" class="profile-org-logo rounded-4 d-none" src="" alt="Logo organisation">
-            <?php endif; ?>
-        </div>
+<style>
+/* Forcer la couleur bleue de marque SyDRA (#005bbb) sur la page profil */
+.profile-shell .btn-primary {
+    background: #005bbb !important;
+    border-color: #005bbb !important;
+    color: #ffffff !important;
+}
+.profile-shell .btn-primary:hover {
+    background: #004a96 !important;
+    border-color: #004a96 !important;
+}
+.profile-shell .btn-outline-primary {
+    color: #005bbb !important;
+    border-color: #005bbb !important;
+}
+.profile-shell .btn-outline-primary:hover {
+    color: #ffffff !important;
+    background: #005bbb !important;
+    border-color: #005bbb !important;
+}
+.profile-shell .text-primary {
+    color: #005bbb !important;
+}
+.profile-shell .btn-outline-secondary {
+    color: #005bbb !important;
+    border-color: #e2e8f0 !important;
+}
+.profile-shell .btn-outline-secondary:hover {
+    background-color: #f8fafc !important;
+    border-color: #cbd5e1 !important;
+    color: #004a96 !important;
+}
+</style>
 
-        <div class="profile-hero-content">
-            <span class="profile-kicker">Profil organisation</span>
-            <h1 class="mb-1"><?= htmlspecialchars($orgName, ENT_QUOTES, 'UTF-8'); ?></h1>
-            <p class="text-muted mb-0">
-                <?= $orgBio !== '' ? nl2br(htmlspecialchars($orgBio, ENT_QUOTES, 'UTF-8')) : 'Aucune biographie organisationnelle renseignée.'; ?>
-            </p>
-
-            <div class="profile-org-meta mt-3">
-                <div class="profile-meta-item"><strong>Téléphone</strong><span><?= htmlspecialchars($orgPhone !== '' ? $orgPhone : '-', ENT_QUOTES, 'UTF-8'); ?></span></div>
-                <div class="profile-meta-item">
-                    <strong>Site web</strong>
-                    <span>
-                        <?php if ($orgWebsite !== ''): ?>
-                            <a href="<?= htmlspecialchars($orgWebsite, ENT_QUOTES, 'UTF-8'); ?>" target="_blank" rel="noopener noreferrer"><?= htmlspecialchars($orgWebsite, ENT_QUOTES, 'UTF-8'); ?></a>
-                        <?php else: ?>
-                            -
-                        <?php endif; ?>
-                    </span>
-                </div>
+<div class="container profile-shell py-4">
+    <!-- MUST COMPLETE PROFILE BANNER -->
+    <?php if (isset($_GET['must_complete_profile']) && $_GET['must_complete_profile'] === '1'): ?>
+        <div class="alert alert-warning border-0 rounded-4 shadow-sm p-3 mb-4 d-flex align-items-center gap-3">
+            <div class="rounded-circle bg-warning text-dark d-flex align-items-center justify-content-center" style="width: 40px; height: 40px; flex-shrink: 0;">
+                <i class="fa-solid fa-triangle-exclamation fs-5"></i>
             </div>
-
-            <button type="button" id="btn-edit-profile" class="btn btn-primary mt-3 profile-edit-trigger">Modifier le profil de l'organisation</button>
-        </div>
-        </div>
-    </div>
-</section>
-
-<section class="profile-shell d-none" id="profile-edit">
-    <div class="card shadow-sm rounded-4 border-0 profile-org-card">
-        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-            <h2 class="mb-0"><i class="fa-solid fa-pen-to-square me-1 text-primary"></i>Modifier le profil de l'organisation</h2>
-            <button type="button" id="btn-cancel-edit" class="btn btn-outline-secondary">Retour</button>
-        </div>
-
-        <div class="profile-logo-current">
-            <div class="profile-logo-current-media">
-                <?php if ($orgLogo !== ''): ?>
-                    <img id="profile-org-logo-edit" class="profile-org-logo rounded-4" src="<?= htmlspecialchars($orgLogo, ENT_QUOTES, 'UTF-8'); ?>" alt="Logo organisation actuel">
-                    <div id="profile-org-fallback-edit" class="profile-org-fallback rounded-4 d-none"><?= htmlspecialchars($orgInitials, ENT_QUOTES, 'UTF-8'); ?></div>
-                <?php else: ?>
-                    <div id="profile-org-fallback-edit" class="profile-org-fallback rounded-4"><?= htmlspecialchars($orgInitials, ENT_QUOTES, 'UTF-8'); ?></div>
-                    <img id="profile-org-logo-edit" class="profile-org-logo rounded-4 d-none" src="" alt="Logo organisation actuel">
-                <?php endif; ?>
-            </div>
-
-            <div class="profile-logo-current-actions">
-                <span class="profile-logo-current-label">Image actuelle</span>
-                <button type="button" id="btn-select-logo" class="btn btn-outline-primary">Modifier l'image</button>
-                <input class="d-none" type="file" id="logo-input" accept="image/jpeg,image/png,image/webp">
-                <small class="text-muted">Après sélection, le rognage s'ouvre automatiquement puis le logo est téléversé directement après validation.</small>
-                <small class="text-muted" id="logo-upload-status"></small>
+            <div>
+                <strong class="text-dark d-block">Configuration requise</strong>
+                <span class="text-secondary small">Veuillez compléter le nom d'affichage de l'organisation, le numéro de téléphone et la biographie pour activer pleinement votre compte.</span>
             </div>
         </div>
-
-        <form method="post" action="?page=profil" id="profile-edit-form" class="mt-3">
-            <input type="hidden" name="action" value="update_profile">
-            <input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
-
-            <div class="row g-3">
-                <div class="col-md-6">
-                    <label class="form-label">Nom de l'organisation</label>
-                    <input class="form-control" name="organization_display_name" value="<?= htmlspecialchars($orgName, ENT_QUOTES, 'UTF-8'); ?>" required>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label">Nom administratif (optionnel)</label>
-                    <input class="form-control" name="organization_name" value="<?= htmlspecialchars((string) ($authUser['organization_name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>">
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label">Téléphone organisation</label>
-                    <input class="form-control" name="telephone_organisation" value="<?= htmlspecialchars($orgPhone, ENT_QUOTES, 'UTF-8'); ?>" placeholder="+243...">
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label">Site web</label>
-                    <input class="form-control" name="site_web" value="<?= htmlspecialchars($orgWebsite, ENT_QUOTES, 'UTF-8'); ?>" placeholder="https://...">
-                </div>
-                <div class="col-12">
-                    <label class="form-label">Biographie organisation</label>
-                    <textarea class="form-control" name="bio_organisation" rows="4" placeholder="Présentation, mandat, zones d'intervention..."><?= htmlspecialchars($orgBio, ENT_QUOTES, 'UTF-8'); ?></textarea>
-                </div>
-            </div>
-
-            <div class="d-flex gap-2 mt-4">
-                <button type="submit" class="btn btn-primary">Enregistrer les informations</button>
-            </div>
-        </form>
-    </div>
-</section>
-
-<?php if (isset($_GET['must_complete_profile']) && $_GET['must_complete_profile'] === '1'): ?>
-    <div class="card shadow-sm rounded-4 border-0 profile-org-card">
-        <p class="mb-0"><small class="text-danger">Configuration requise: complétez le nom organisation, le téléphone et la biographie pour terminer l'activation du compte.</small></p>
-    </div>
-<?php endif; ?>
-
-<div class="card shadow-sm rounded-4 border-0 profile-org-card">
-    <h2 class="profile-section-title"><i class="fa-solid fa-shield-halved"></i>Sécurité du compte</h2>
-    <?php if (isset($_GET['must_change_password']) && $_GET['must_change_password'] === '1'): ?>
-        <p><small class="text-danger">Action requise: vous devez changer votre mot de passe pour continuer en toute sécurité.</small></p>
     <?php endif; ?>
 
-    <form method="post" action="?page=profil">
-        <input type="hidden" name="action" value="change_password">
-        <input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
-
-        <label class="form-label">Mot de passe actuel</label>
-        <div class="password-field mb-2">
-            <input class="form-control" type="password" name="current_password" id="current-password" required>
-            <button class="password-toggle" type="button" data-toggle-password="current-password" aria-label="Afficher le mot de passe">
-                <i class="fa-regular fa-eye"></i>
-            </button>
+    <div class="row g-4">
+        <!-- COLONNE GAUCHE: IDENTITÉ DE L'ORGANISATION -->
+        <div class="col-lg-4">
+            <div class="card profile-org-card shadow-sm border-0 rounded-4 overflow-hidden h-100 bg-white">
+                <!-- Cover Banner -->
+                <div style="height: 120px; background: linear-gradient(135deg, #005bbb 0%, #004a96 100%);"></div>
+                
+                <div class="card-body pt-0 text-center px-4 pb-4 position-relative">
+                    <!-- Logo Floating -->
+                    <div class="position-relative d-inline-block" style="margin-top: -60px; z-index: 5;">
+                        <div class="profile-org-logo-wrap-lg rounded-circle overflow-hidden border border-4 border-white shadow-sm bg-white" style="width: 110px; height: 110px; margin: 0 auto;">
+                            <?php if ($orgLogo !== ''): ?>
+                                <img id="profile-org-logo-view" class="w-100 h-100" style="object-fit: cover;" src="<?= htmlspecialchars($orgLogo, ENT_QUOTES, 'UTF-8'); ?>" alt="Logo organisation">
+                                <div id="profile-org-fallback-view" class="profile-org-fallback rounded-circle d-none"><?= htmlspecialchars($orgInitials, ENT_QUOTES, 'UTF-8'); ?></div>
+                            <?php else: ?>
+                                <div id="profile-org-fallback-view" class="profile-org-fallback rounded-circle"><?= htmlspecialchars($orgInitials, ENT_QUOTES, 'UTF-8'); ?></div>
+                                <img id="profile-org-logo-view" class="w-100 h-100 d-none" style="object-fit: cover;" src="" alt="Logo organisation">
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                    
+                    <h3 class="fw-bold text-dark mt-3 mb-1" id="profile-org-name-sidebar"><?= htmlspecialchars($orgName, ENT_QUOTES, 'UTF-8'); ?></h3>
+                    <span class="badge rounded-pill bg-light text-primary px-3 py-2 border mb-3" style="font-size: 0.75rem; font-weight: 600; border-color: #cbd5e1 !important;"><i class="fa-solid fa-building me-1"></i> Organisation partenaire</span>
+                    
+                    <p class="text-secondary small mb-4 px-2" id="profile-org-bio-sidebar" style="line-height: 1.4; min-height: 50px;">
+                        <?= $orgBio !== '' ? nl2br(htmlspecialchars($orgBio, ENT_QUOTES, 'UTF-8')) : 'Aucune biographie organisationnelle renseignée.'; ?>
+                    </p>
+                    
+                    <hr class="text-muted opacity-25">
+                    
+                    <!-- Contacts & Links -->
+                    <div class="text-start mt-4 px-2">
+                        <div class="d-flex align-items-center gap-3 mb-3">
+                            <div class="rounded-circle bg-light d-flex align-items-center justify-content-center" style="width: 38px; height: 38px; color: #005bbb; flex-shrink: 0;">
+                                <i class="fa-solid fa-phone"></i>
+                            </div>
+                            <div>
+                                <small class="text-secondary d-block" style="font-size: 0.75rem; font-weight: 500;">Téléphone</small>
+                                <span class="fw-semibold text-dark small" id="profile-org-phone-sidebar"><?= htmlspecialchars($orgPhone !== '' ? $orgPhone : '-', ENT_QUOTES, 'UTF-8'); ?></span>
+                            </div>
+                        </div>
+                        
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="rounded-circle bg-light d-flex align-items-center justify-content-center" style="width: 38px; height: 38px; color: #005bbb; flex-shrink: 0;">
+                                <i class="fa-solid fa-globe"></i>
+                            </div>
+                            <div>
+                                <small class="text-secondary d-block" style="font-size: 0.75rem; font-weight: 500;">Site web</small>
+                                <?php if ($orgWebsite !== ''): ?>
+                                    <a id="profile-org-web-sidebar" href="<?= htmlspecialchars($orgWebsite, ENT_QUOTES, 'UTF-8'); ?>" class="fw-semibold text-primary text-decoration-none small text-break" target="_blank" rel="noopener noreferrer"><?= htmlspecialchars($orgWebsite, ENT_QUOTES, 'UTF-8'); ?></a>
+                                <?php else: ?>
+                                    <span id="profile-org-web-sidebar" class="fw-semibold text-secondary small">-</span>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
-
-        <label class="form-label">Nouveau mot de passe</label>
-        <div class="password-field mb-2">
-            <input class="form-control" type="password" name="new_password" id="new-password" required>
-            <button class="password-toggle" type="button" data-toggle-password="new-password" aria-label="Afficher le mot de passe">
-                <i class="fa-regular fa-eye"></i>
-            </button>
+        
+        <!-- COLONNE DROITE: INTERFACES DYNAMIQUES -->
+        <div class="col-lg-8">
+            <!-- MODE VISUALISATION (Sécurité + Préférences) -->
+            <div id="profile-view" class="d-flex flex-column gap-4">
+                <!-- Banner bascule édition -->
+                <div class="card shadow-sm border-0 rounded-4 p-4 bg-white">
+                    <div class="row align-items-center g-3">
+                        <div class="col-md-8 text-center text-md-start">
+                            <h4 class="fw-bold text-dark mb-1">Coordonnées de l'organisation</h4>
+                            <p class="text-secondary small mb-0">Modifiez le nom, la biographie, les contacts et le logo de l'organisation.</p>
+                        </div>
+                        <div class="col-md-4 text-center text-md-end">
+                            <button type="button" id="btn-edit-profile" class="btn btn-primary rounded-pill px-4 shadow-sm"><i class="fa-solid fa-pen-to-square me-2"></i>Modifier le profil</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Mot de passe / Sécurité -->
+                <div class="card shadow-sm border-0 rounded-4 p-4 bg-white">
+                    <h4 class="profile-section-title fw-bold mb-3 d-flex align-items-center gap-2"><i class="fa-solid fa-shield-halved text-primary"></i> Sécurité du compte</h4>
+                    <p class="text-secondary small mb-4">Mettez à jour le mot de passe de votre compte régulièrement pour sécuriser l'accès aux rapports.</p>
+                    
+                    <?php if (isset($_GET['must_change_password']) && $_GET['must_change_password'] === '1'): ?>
+                        <div class="alert alert-danger border-0 rounded-3 small mb-3"><i class="fa-solid fa-triangle-exclamation me-2"></i> Action requise: vous devez changer votre mot de passe pour continuer en toute sécurité.</div>
+                    <?php endif; ?>
+                    
+                    <form method="post" action="?page=profil">
+                        <input type="hidden" name="action" value="change_password">
+                        <input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
+                
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold text-secondary">Mot de passe actuel</label>
+                            <div class="password-field">
+                                <input class="form-control rounded-pill px-3" type="password" name="current_password" id="current-password" required>
+                                <button class="password-toggle" type="button" data-toggle-password="current-password" aria-label="Afficher le mot de passe">
+                                    <i class="fa-regular fa-eye"></i>
+                                </button>
+                            </div>
+                        </div>
+                
+                        <div class="row g-3">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-semibold text-secondary">Nouveau mot de passe</label>
+                                <div class="password-field">
+                                    <input class="form-control rounded-pill px-3" type="password" name="new_password" id="new-password" required>
+                                    <button class="password-toggle" type="button" data-toggle-password="new-password" aria-label="Afficher le mot de passe">
+                                        <i class="fa-regular fa-eye"></i>
+                                    </button>
+                                </div>
+                            </div>
+                    
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-semibold text-secondary">Confirmer le nouveau mot de passe</label>
+                                <div class="password-field">
+                                    <input class="form-control rounded-pill px-3" type="password" name="new_password_confirmation" id="new-password-confirmation" required>
+                                    <button class="password-toggle" type="button" data-toggle-password="new-password-confirmation" aria-label="Afficher le mot de passe">
+                                        <i class="fa-regular fa-eye"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                
+                        <button class="btn btn-primary rounded-pill px-4 shadow-sm mt-2" type="submit">Changer le mot de passe</button>
+                    </form>
+                </div>
+                
+                <!-- Préférences -->
+                <div class="card shadow-sm border-0 rounded-4 p-4 bg-white">
+                    <h4 class="profile-section-title fw-bold mb-3 d-flex align-items-center gap-2"><i class="fa-solid fa-globe text-primary"></i> Préférences linguistiques</h4>
+                    <form action="" method="get">
+                        <input type="hidden" name="page" value="profil">
+                        <div class="mb-1">
+                            <label class="form-label small fw-semibold text-secondary">Langue de l'interface / Interface Language</label>
+                            <select name="lang" class="form-select rounded-pill px-3" onchange="this.form.submit()">
+                                <option value="fr" <?= $currentLang === 'fr' ? 'selected' : ''; ?>>Français</option>
+                                <option value="en" <?= $currentLang === 'en' ? 'selected' : ''; ?>>English</option>
+                            </select>
+                            <small class="text-muted mt-2 d-block">La sélection sera appliquée immédiatement à l'ensemble du système.</small>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- MODE ÉDITION (Formulaire) -->
+            <div id="profile-edit" class="d-none">
+                <div class="card shadow-sm border-0 rounded-4 p-4 bg-white">
+                    <div class="d-flex justify-content-between align-items-center gap-2 mb-4 border-bottom pb-3">
+                        <h3 class="fw-bold mb-0 text-dark h5"><i class="fa-solid fa-pen-to-square me-2 text-primary"></i>Modifier les informations</h3>
+                        <button type="button" id="btn-cancel-edit" class="btn btn-outline-secondary rounded-pill px-4">Retour</button>
+                    </div>
+            
+                    <!-- Modifier Logo / Image de profil -->
+                    <div class="profile-logo-current p-3 border rounded-4 bg-light mb-4 d-flex align-items-center gap-3">
+                        <div class="profile-logo-current-media rounded-circle overflow-hidden bg-white shadow-sm border" style="width: 90px; height: 90px; flex-shrink: 0;">
+                            <?php if ($orgLogo !== ''): ?>
+                                <img id="profile-org-logo-edit" class="w-100 h-100" style="object-fit: cover;" src="<?= htmlspecialchars($orgLogo, ENT_QUOTES, 'UTF-8'); ?>" alt="Logo organisation actuel">
+                                <div id="profile-org-fallback-edit" class="profile-org-fallback rounded-circle d-none" style="font-size: 24px;"><?= htmlspecialchars($orgInitials, ENT_QUOTES, 'UTF-8'); ?></div>
+                            <?php else: ?>
+                                <div id="profile-org-fallback-edit" class="profile-org-fallback rounded-circle" style="font-size: 24px;"><?= htmlspecialchars($orgInitials, ENT_QUOTES, 'UTF-8'); ?></div>
+                                <img id="profile-org-logo-edit" class="w-100 h-100 d-none" style="object-fit: cover;" src="" alt="Logo organisation actuel">
+                            <?php endif; ?>
+                        </div>
+            
+                        <div class="profile-logo-current-actions flex-grow-1">
+                            <span class="profile-logo-current-label d-block small fw-bold text-secondary text-uppercase mb-1">Image ou Logo de l'organisation</span>
+                            <button type="button" id="btn-select-logo" class="btn btn-outline-primary btn-sm rounded-pill px-3 shadow-sm"><i class="fa-solid fa-camera me-1"></i> Sélectionner une image</button>
+                            <input class="d-none" type="file" id="logo-input" accept="image/jpeg,image/png,image/webp">
+                            <div class="text-muted mt-2" style="font-size: 0.72rem; line-height: 1.3;">Le rognage s'ouvre automatiquement. Le logo sera enregistré directement après validation.</div>
+                            <small class="text-success small fw-semibold" id="logo-upload-status"></small>
+                        </div>
+                    </div>
+            
+                    <!-- Formulaire -->
+                    <form method="post" action="?page=profil" id="profile-edit-form">
+                        <input type="hidden" name="action" value="update_profile">
+                        <input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
+            
+                        <div class="row g-3">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-semibold text-secondary">Nom d'affichage (Français)</label>
+                                <input class="form-control rounded-pill px-3" name="organization_display_name" value="<?= htmlspecialchars($orgName, ENT_QUOTES, 'UTF-8'); ?>" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-semibold text-secondary">Nom administratif / Abrégé</label>
+                                <input class="form-control rounded-pill px-3" name="organization_name" value="<?= htmlspecialchars((string) ($authUser['organization_name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-semibold text-secondary">Téléphone officiel de l'organisation</label>
+                                <input class="form-control rounded-pill px-3" name="telephone_organisation" value="<?= htmlspecialchars($orgPhone, ENT_QUOTES, 'UTF-8'); ?>" placeholder="+243...">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-semibold text-secondary">Site web officiel</label>
+                                <input class="form-control rounded-pill px-3" name="site_web" value="<?= htmlspecialchars($orgWebsite, ENT_QUOTES, 'UTF-8'); ?>" placeholder="https://...">
+                            </div>
+                            <div class="col-12 mb-3">
+                                <label class="form-label small fw-semibold text-secondary">Biographie et Mission de l'organisation</label>
+                                <textarea class="form-control rounded-4 p-3" name="bio_organisation" rows="4" placeholder="Présentation, mandat, zones d'intervention..."><?= htmlspecialchars($orgBio, ENT_QUOTES, 'UTF-8'); ?></textarea>
+                            </div>
+                        </div>
+            
+                        <div class="d-flex gap-2 mt-3 justify-content-end">
+                            <button type="button" class="btn btn-light rounded-pill px-4 border js-btn-cancel-edit">Annuler</button>
+                            <button type="submit" class="btn btn-primary rounded-pill px-4 shadow-sm">Enregistrer les informations</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
         </div>
-
-        <label class="form-label">Confirmer le nouveau mot de passe</label>
-        <div class="password-field mb-2">
-            <input class="form-control" type="password" name="new_password_confirmation" id="new-password-confirmation" required>
-            <button class="password-toggle" type="button" data-toggle-password="new-password-confirmation" aria-label="Afficher le mot de passe">
-                <i class="fa-regular fa-eye"></i>
-            </button>
-        </div>
-
-        <button class="btn btn-primary mt-3" type="submit">Changer le mot de passe</button>
-    </form>
+    </div>
 </div>
 
 <div class="modal fade" id="cropperModal" tabindex="-1" aria-hidden="true">
@@ -180,8 +296,8 @@ if ($orgName !== '') {
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
-                <button type="button" id="btn-confirm-crop" class="btn btn-primary">Valider et téléverser</button>
+                <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" id="btn-confirm-crop" class="btn btn-primary rounded-pill px-4">Valider et téléverser</button>
             </div>
         </div>
     </div>
@@ -192,7 +308,6 @@ if ($orgName !== '') {
     var view = document.getElementById('profile-view');
     var edit = document.getElementById('profile-edit');
     var btnEdit = document.getElementById('btn-edit-profile');
-    var btnCancel = document.getElementById('btn-cancel-edit');
     var btnSelectLogo = document.getElementById('btn-select-logo');
     var logoInput = document.getElementById('logo-input');
     var logoStatus = document.getElementById('logo-upload-status');
@@ -218,9 +333,13 @@ if ($orgName !== '') {
     if (btnEdit) {
         btnEdit.addEventListener('click', showEditMode);
     }
-    if (btnCancel) {
-        btnCancel.addEventListener('click', showViewMode);
-    }
+    
+    // Bind all cancel buttons
+    var cancels = document.querySelectorAll('.js-btn-cancel-edit, #btn-cancel-edit');
+    cancels.forEach(function(btn) {
+        btn.addEventListener('click', showViewMode);
+    });
+
     if (btnSelectLogo && logoInput) {
         btnSelectLogo.addEventListener('click', function () {
             logoInput.click();

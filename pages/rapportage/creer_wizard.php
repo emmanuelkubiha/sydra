@@ -9,19 +9,317 @@ $wizardDraftIdValue = (int) ($wizardDraftId ?? 0);
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bs-stepper/dist/css/bs-stepper.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/dropzone@5.9.3/dist/min/dropzone.min.css">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 
-<div class="card shadow-sm rounded-4 wizard-shell">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+<style>
+/* ============================================================
+   WIZARD PREMIUM — SYDRA (Mission 2 Sprint 4.2)
+   Design : SaaS Premium / Notion / Asana
+   ============================================================ */
+
+/* Shell principal */
+.wizard-shell {
+    border: 1px solid #dbeafe;
+    background: #ffffff;
+    padding: 28px 28px 24px;
+}
+
+/* Header wizard */
+.wizard-page-title {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 3px;
+}
+.wizard-page-sub {
+    font-size: 0.875rem;
+    color: #64748b;
+}
+
+/* Sticky top bar actions */
+.wizard-topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 24px;
+}
+
+/* === BS-STEPPER CUSTOM === */
+.bs-stepper .bs-stepper-header {
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 20px;
+    margin-bottom: 28px;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+.bs-stepper .step-trigger {
+    background: transparent;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 10px;
+    transition: background .15s ease;
+}
+.bs-stepper .step-trigger:hover {
+    background: #f1f5f9;
+}
+.bs-stepper .bs-stepper-circle {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background-color: #e2e8f0;
+    color: #64748b;
+    font-size: 0.85rem;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background .2s ease, color .2s ease;
+}
+.bs-stepper .active .bs-stepper-circle {
+    background: linear-gradient(135deg, #005bbb, #3a86ff);
+    color: #ffffff;
+    box-shadow: 0 4px 14px rgba(0, 91, 187, .30);
+}
+.bs-stepper .bs-stepper-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #94a3b8;
+    margin-top: 4px;
+}
+.bs-stepper .active .bs-stepper-label {
+    color: #005bbb;
+}
+.bs-stepper .line {
+    flex: 1;
+    height: 2px;
+    background: #e2e8f0;
+    margin: 18px -4px 0;
+    min-width: 20px;
+}
+
+/* === STEP CONTENT CARDS === */
+.step-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 20px;
+}
+.step-section-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: #94a3b8;
+    margin-bottom: 14px;
+}
+.step-ux-hint {
+    font-size: 0.9rem;
+    color: #64748b;
+    font-style: italic;
+    margin-bottom: 20px;
+}
+
+/* === FORM CONTROLS PREMIUM === */
+.wizard-shell .form-label {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 5px;
+}
+.wizard-shell .form-control,
+.wizard-shell .form-select {
+    border-radius: 10px;
+    border: 1.5px solid #e2e8f0;
+    padding: 10px 14px;
+    font-size: 0.875rem;
+    color: #1e293b;
+    background: #fff;
+    transition: border-color .18s ease, box-shadow .18s ease;
+}
+.wizard-shell .form-control:focus,
+.wizard-shell .form-select:focus {
+    border-color: #005bbb;
+    box-shadow: 0 0 0 3px rgba(0, 91, 187, .09);
+}
+.gps-readonly {
+    background: #f1f5f9 !important;
+    color: #334155;
+    font-weight: 600;
+    cursor: default;
+}
+
+/* === NAVIGATION BUTTONS === */
+.wizard-btn-next {
+    background: linear-gradient(135deg, #005bbb, #3a86ff);
+    color: #fff;
+    border: none;
+    border-radius: 50px;
+    padding: 10px 28px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    box-shadow: 0 4px 14px rgba(0, 91, 187, .25);
+    transition: transform .15s ease, box-shadow .15s ease;
+}
+.wizard-btn-next:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(0, 91, 187, .35);
+    color: #fff;
+}
+.wizard-btn-prev {
+    border-radius: 50px;
+    padding: 10px 24px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    border: 1.5px solid #e2e8f0;
+    color: #64748b;
+    background: #fff;
+    transition: background .15s ease, border-color .15s ease;
+}
+.wizard-btn-prev:hover {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+}
+.btn-save-draft {
+    border-radius: 50px;
+    padding: 10px 22px;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+.btn-submit-cluster {
+    border-radius: 50px;
+    padding: 10px 28px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    background: linear-gradient(135deg, #005bbb, #3a86ff);
+    border: none;
+    color: #fff;
+    box-shadow: 0 4px 14px rgba(0, 91, 187, .25);
+    transition: transform .15s ease, box-shadow .15s ease;
+}
+.btn-submit-cluster:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(0, 91, 187, .35);
+    color: #fff;
+}
+
+/* === GPS BUTTON === */
+.btn-gps {
+    border-radius: 50px;
+    border: 1.5px solid #005bbb;
+    color: #005bbb;
+    background: #fff;
+    padding: 8px 20px;
+    font-size: 0.83rem;
+    font-weight: 600;
+    transition: all .15s ease;
+}
+.btn-gps:hover {
+    background: #005bbb;
+    color: #fff;
+}
+
+/* === PLACE SEARCH INPUT === */
+.place-search-wrap {
+    position: relative;
+}
+.place-search-wrap .place-icon {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #94a3b8;
+    font-size: 0.9rem;
+    pointer-events: none;
+}
+#place_search {
+    padding-left: 38px;
+    border-radius: 50px !important;
+    border: 1.5px solid #e2e8f0;
+    box-shadow: 0 2px 8px rgba(0,0,0,.06);
+    font-size: 0.875rem;
+}
+#place_search:focus {
+    border-color: #005bbb;
+    box-shadow: 0 0 0 3px rgba(0, 91, 187, .09), 0 2px 8px rgba(0,0,0,.06);
+}
+
+/* === GOOGLE MAPS CONTAINER === */
+#wizard-map-container {
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1.5px solid #e2e8f0;
+    box-shadow: 0 2px 12px rgba(0,0,0,.06);
+}
+#wizard-google-map {
+    width: 100%;
+    height: 320px;
+}
+
+/* === URGENCY SELECT COLORS === */
+option[value="Faible"]  { color: #16a34a; }
+option[value="Moyenne"] { color: #d97706; }
+option[value="Elevee"]  { color: #ea580c; }
+option[value="Critique"]{ color: #dc2626; }
+
+/* === DROPZONE PREMIUM === */
+.dz-premium {
+    border: 2px dashed #94a3b8;
+    border-radius: 16px;
+    background: #f8fafc;
+    padding: 32px 20px;
+    text-align: center;
+    transition: border-color .2s ease, background .2s ease;
+    cursor: pointer;
+}
+.dz-premium:hover,
+.dz-premium.dz-drag-hover {
+    border-color: #005bbb;
+    background: #eff6ff;
+}
+.dz-premium .dz-message {
+    font-size: 0.9rem;
+    color: #64748b;
+    font-weight: 500;
+}
+.dz-premium .dz-message i {
+    font-size: 2rem;
+    color: #94a3b8;
+    display: block;
+    margin-bottom: 10px;
+}
+
+/* === STEP DIVIDER === */
+.step-nav-divider {
+    border-top: 1px solid #e2e8f0;
+    margin-top: 24px;
+    padding-top: 20px;
+}
+
+/* Textarea sizing */
+.textarea-facts { min-height: 130px; }
+.textarea-analysis { min-height: 100px; }
+
+/* Tooltip icon */
+.tooltip-icon {
+    cursor: help;
+    opacity: .7;
+    transition: opacity .15s ease;
+}
+.tooltip-icon:hover { opacity: 1; }
+</style>
+
+<div class="wizard-shell card shadow-sm rounded-4">
+    <div class="wizard-topbar">
         <div>
-            <h1 class="mb-1">Saisie manuelle d'un rapport</h1>
-            <p class="text-muted mb-0">Assistant guidé en 4 étapes pour documenter proprement un incident terrain.</p>
+            <h1 class="wizard-page-title"><i class="fa-solid fa-file-pen me-2 text-primary"></i>Créer un rapport d'incident</h1>
+            <p class="wizard-page-sub">Assistant guidé en 4 étapes pour documenter un incident terrain avec précision.</p>
         </div>
         <div class="d-flex gap-2 align-items-center flex-wrap">
-            <button type="button" class="btn btn-outline-secondary" id="btn-save-draft-sticky">
-                <i class="fa-regular fa-floppy-disk me-1"></i>Enregistrer le brouillon
+            <button type="button" class="btn btn-outline-secondary btn-save-draft" id="btn-save-draft-sticky">
+                <i class="fa-regular fa-floppy-disk me-1"></i>Sauvegarder le brouillon
             </button>
-            <a href="?page=rapportage" class="btn btn-small">Retour au choix</a>
         </div>
     </div>
 
@@ -29,29 +327,29 @@ $wizardDraftIdValue = (int) ($wizardDraftId ?? 0);
         <div class="bs-stepper-header" role="tablist">
             <div class="step" data-target="#step-1">
                 <button type="button" class="step-trigger" role="tab" aria-controls="step-1" id="step-1-trigger">
-                    <span class="bs-stepper-circle">1</span>
+                    <span class="bs-stepper-circle"><i class="fa-solid fa-map-location-dot" style="font-size:.85rem"></i></span>
                     <span class="bs-stepper-label">Localisation</span>
                 </button>
             </div>
             <div class="line"></div>
             <div class="step" data-target="#step-2">
                 <button type="button" class="step-trigger" role="tab" aria-controls="step-2" id="step-2-trigger">
-                    <span class="bs-stepper-circle">2</span>
-                    <span class="bs-stepper-label">Faits & Bilan</span>
+                    <span class="bs-stepper-circle"><i class="fa-solid fa-triangle-exclamation" style="font-size:.8rem"></i></span>
+                    <span class="bs-stepper-label">Faits &amp; Bilan</span>
                 </button>
             </div>
             <div class="line"></div>
             <div class="step" data-target="#step-3">
                 <button type="button" class="step-trigger" role="tab" aria-controls="step-3" id="step-3-trigger">
-                    <span class="bs-stepper-circle">3</span>
-                    <span class="bs-stepper-label">Analyse & Action</span>
+                    <span class="bs-stepper-circle"><i class="fa-solid fa-magnifying-glass-chart" style="font-size:.8rem"></i></span>
+                    <span class="bs-stepper-label">Analyse</span>
                 </button>
             </div>
             <div class="line"></div>
             <div class="step" data-target="#step-4">
                 <button type="button" class="step-trigger" role="tab" aria-controls="step-4" id="step-4-trigger">
-                    <span class="bs-stepper-circle">4</span>
-                    <span class="bs-stepper-label">Pièces jointes</span>
+                    <span class="bs-stepper-circle"><i class="fa-solid fa-paperclip" style="font-size:.85rem"></i></span>
+                    <span class="bs-stepper-label">Preuves</span>
                 </button>
             </div>
         </div>
@@ -61,128 +359,264 @@ $wizardDraftIdValue = (int) ($wizardDraftId ?? 0);
             <input type="hidden" name="status_action" id="status_action" value="Brouillon">
             <input type="hidden" name="draft_id" id="draft_id" value="<?= $wizardDraftIdValue; ?>">
 
+            <!-- ═══════════════════════════════════════════════
+                 ÉTAPE 1 — LOCALISATION
+                 ═══════════════════════════════════════════════ -->
             <div id="step-1" class="content" role="tabpanel" aria-labelledby="step-1-trigger">
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <label class="form-label">Province *</label>
-                        <input type="text" class="form-control" name="province" required>
+                <p class="step-ux-hint"><i class="fa-solid fa-location-crosshairs me-2 text-primary"></i>Commençons par localiser le lieu de l'incident...</p>
+
+                <!-- Recherche OpenStreetMap (Nominatim) -->
+                <div class="step-card mb-3">
+                    <div class="step-section-title">Recherche rapide de lieu</div>
+                    <div class="position-relative" style="z-index: 9999;">
+                        <input type="text" id="place_search" class="form-control mb-3" placeholder="Rechercher un village, une ville (ex: Minova)..." autocomplete="off">
+                        <ul id="search_results" class="list-group position-absolute w-100 shadow-lg" style="display: none; max-height: 250px; overflow-y: auto; z-index: 99999; background: white; border-radius: 8px;"></ul>
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Territoire *</label>
-                        <input type="text" class="form-control" name="territory" required>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Zone de santé *</label>
-                        <input type="text" class="form-control" name="health_zone" required>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Groupement *</label>
-                        <input type="text" class="form-control" name="groupement" required>
-                    </div>
-                    <div class="col-md-12">
-                        <label class="form-label">Village *</label>
-                        <input type="text" class="form-control" name="village" required>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Latitude GPS</label>
-                        <input type="text" class="form-control gps-readonly" name="gps_lat" id="gps_lat" placeholder="Cliquez sur la carte" readonly>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Longitude GPS</label>
-                        <input type="text" class="form-control gps-readonly" name="gps_lng" id="gps_lng" placeholder="Cliquez sur la carte" readonly>
-                    </div>
-                    <div class="col-12">
-                        <label for="location-search-input" class="form-label">Rechercher un lieu (Ex: Minova)</label>
-                        <div class="input-group">
-                            <span class="input-group-text"><i class="bi bi-search"></i></span>
-                            <input type="text" class="form-control" id="location-search-input" placeholder="Ex: Minova, Bukavu, Uvira...">
-                            <button type="button" class="btn btn-outline-primary" id="btn-search-place">Rechercher</button>
+                    <small class="text-muted">La sélection d'un lieu remplit automatiquement les champs ci-dessous.</small>
+                </div>
+
+                <!-- Carte Leaflet -->
+                <div id="wizard-map-container" class="mb-3">
+                    <div id="wizard-leaflet-map" style="height: 350px; border-radius: 12px; z-index: 1;"></div>
+                </div>
+                <small class="text-muted d-block mb-4"><i class="fa-solid fa-circle-info me-1 text-primary"></i>Astuce : cliquez sur la carte pour placer un marqueur et remplir les coordonnées GPS automatiquement.</small>
+
+                <!-- Champs administratifs -->
+                <div class="step-card">
+                    <div class="step-section-title">Localisation administrative</div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label" for="wiz_province">Province *
+                                <i class="fa-solid fa-circle-info tooltip-icon text-primary ms-1"
+                                   data-bs-toggle="tooltip"
+                                   title="Province administrative de la RDC (ex: Nord-Kivu, Sud-Kivu...)"></i>
+                            </label>
+                            <input type="text" class="form-control" name="province" id="wiz_province" required placeholder="Ex: Nord-Kivu">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="wiz_territory">Territoire *</label>
+                            <input type="text" class="form-control" name="territory" id="wiz_territory" required placeholder="Ex: Masisi, Rutshuru...">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="wiz_health_zone">Zone de santé
+                                <i class="fa-solid fa-circle-info tooltip-icon text-primary ms-1"
+                                   data-bs-toggle="tooltip"
+                                   title="Zone de santé de référence pour cet incident"></i>
+                            </label>
+                            <input type="text" class="form-control" name="health_zone" id="wiz_health_zone" placeholder="Ex: Zone de santé de Masisi">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="wiz_groupement">Groupement</label>
+                            <input type="text" class="form-control" name="groupement" id="wiz_groupement" placeholder="Ex: Groupement Bahunde">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label" for="wiz_village">Village / Localité *</label>
+                            <input type="text" class="form-control" name="village" id="wiz_village" required placeholder="Ex: Minova">
                         </div>
                     </div>
-                    <div class="col-12">
-                        <div id="wizard-location-map" class="wizard-location-map" aria-label="Carte de localisation interactive"></div>
-                        <small class="text-muted">Astuce: cliquez directement sur la carte pour remplir automatiquement Province, Territoire/Ville, Village et coordonnées GPS.</small>
+                </div>
+
+                <!-- GPS -->
+                <div class="step-card mt-3">
+                    <div class="step-section-title">Coordonnées GPS</div>
+                    <div class="row g-3 align-items-end">
+                        <div class="col-md-5">
+                            <label class="form-label" for="gps_lat">Latitude</label>
+                            <input type="text" class="form-control gps-readonly" name="gps_lat" id="gps_lat" placeholder="Auto depuis la carte" readonly>
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label" for="gps_lng">Longitude</label>
+                            <input type="text" class="form-control gps-readonly" name="gps_lng" id="gps_lng" placeholder="Auto depuis la carte" readonly>
+                        </div>
+                        <div class="col-md-2">
+                            <button type="button" class="btn btn-gps w-100" id="btn-geoloc">
+                                <i class="fa-solid fa-location-crosshairs me-1"></i>Ma position
+                            </button>
+                        </div>
                     </div>
                 </div>
 
-                <div class="d-flex justify-content-between mt-3">
-                    <span></span>
-                    <button type="button" class="btn btn-outline-primary" id="btn-geoloc">Obtenir ma position</button>
-                </div>
-
-                <div class="d-flex justify-content-end mt-3">
-                    <button type="button" class="btn wizard-next">Continuer</button>
+                <div class="step-nav-divider d-flex justify-content-end">
+                    <button type="button" class="wizard-btn-next wizard-next">
+                        Suivant <i class="fa-solid fa-arrow-right ms-1"></i>
+                    </button>
                 </div>
             </div>
 
+            <!-- ═══════════════════════════════════════════════
+                 ÉTAPE 2 — FAITS & BILAN
+                 ═══════════════════════════════════════════════ -->
             <div id="step-2" class="content" role="tabpanel" aria-labelledby="step-2-trigger">
-                <div class="row g-3">
-                    <div class="col-md-8">
-                        <label class="form-label">Type d'incident *</label>
-                        <input type="text" class="form-control" name="incident_type" required>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label">Niveau de gravité *</label>
-                        <select class="form-select" name="urgency_level" required>
-                            <option value="">Choisir...</option>
-                            <option value="Faible">Faible</option>
-                            <option value="Moyenne" selected>Moyenne</option>
-                            <option value="Elevee">Elevée</option>
-                            <option value="Critique">Critique</option>
-                        </select>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Nombre de victimes</label>
-                        <input type="number" min="0" class="form-control" name="victims_count" value="0">
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Nombre de ménages déplacés</label>
-                        <input type="number" min="0" class="form-control" name="displaced_households" value="0">
-                    </div>
-                    <div class="col-md-12">
-                        <label class="form-label">Description détaillée *</label>
-                        <textarea class="form-control" name="description" rows="6" required></textarea>
+                <p class="step-ux-hint"><i class="fa-solid fa-triangle-exclamation me-2 text-warning"></i>Dites-nous en un peu plus sur les faits, le bilan et le nombre de victimes...</p>
+
+                <div class="step-card">
+                    <div class="step-section-title">Classification de l'incident</div>
+                    <div class="row g-3">
+                        <div class="col-md-8">
+                            <label class="form-label" for="wiz_incident_type">Type d'incident *
+                                <i class="fa-solid fa-circle-info tooltip-icon text-primary ms-1"
+                                   data-bs-toggle="tooltip"
+                                   title="Catégorie principale de l'incident (ex: Violence armée, Déplacement forcé, Violence sexuelle, Vol...)"></i>
+                            </label>
+                            <select class="form-select" name="incident_type" id="wiz_incident_type" required>
+                                <option value="">Sélectionner un type...</option>
+                                <option value="Violence armée">Violence armée</option>
+                                <option value="Déplacement forcé">Déplacement forcé</option>
+                                <option value="Violence sexuelle">Violence sexuelle (VSBG)</option>
+                                <option value="Vol / Pillage">Vol / Pillage</option>
+                                <option value="Enlèvement / Kidnapping">Enlèvement / Kidnapping</option>
+                                <option value="Détention arbitraire">Détention arbitraire</option>
+                                <option value="Destruction de biens">Destruction de biens</option>
+                                <option value="Recrutement forcé">Recrutement forcé</option>
+                                <option value="Autre">Autre (préciser dans la description)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="wiz_urgency_level">Niveau de gravité *
+                                <i class="fa-solid fa-circle-info tooltip-icon text-primary ms-1"
+                                   data-bs-toggle="tooltip"
+                                   title="Faible: impact limité | Moyenne: plusieurs victimes | Élevée: impact communautaire | Critique: urgence absolue"></i>
+                            </label>
+                            <select class="form-select" name="urgency_level" id="wiz_urgency_level" required>
+                                <option value="">Choisir...</option>
+                                <option value="Faible">🟢 Faible</option>
+                                <option value="Moyenne" selected>🟡 Moyenne</option>
+                                <option value="Elevee">🟠 Élevée</option>
+                                <option value="Critique">🔴 Critique</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
 
-                <div class="d-flex justify-content-between mt-3">
-                    <button type="button" class="btn btn-light wizard-prev">Retour</button>
-                    <button type="button" class="btn wizard-next">Continuer</button>
+                <div class="step-card mt-3">
+                    <div class="step-section-title">Bilan humain</div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label" for="wiz_victims_count">Nombre de victimes directes
+                                <i class="fa-solid fa-circle-info tooltip-icon text-primary ms-1"
+                                   data-bs-toggle="tooltip"
+                                   title="Nombre de personnes directement affectées (blessées, tuées, abusées...)"></i>
+                            </label>
+                            <input type="number" min="0" class="form-control" name="victims_count" id="wiz_victims_count" value="0">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="wiz_displaced">Ménages déplacés
+                                <i class="fa-solid fa-circle-info tooltip-icon text-primary ms-1"
+                                   data-bs-toggle="tooltip"
+                                   title="Nombre de ménages ayant fui suite à cet incident"></i>
+                            </label>
+                            <input type="number" min="0" class="form-control" name="displaced_households" id="wiz_displaced" value="0">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="step-card mt-3">
+                    <div class="step-section-title">Description des faits</div>
+                    <label class="form-label" for="wiz_facts_text">Faits constatés *
+                        <i class="fa-solid fa-circle-info tooltip-icon text-primary ms-1"
+                           data-bs-toggle="tooltip"
+                           title="Décrivez les faits objectivement : qui, quoi, quand, comment. Évitez les noms sensibles (utilisez des codes si nécessaire)."></i>
+                    </label>
+                    <textarea class="form-control textarea-facts" name="facts_text" id="wiz_facts_text" rows="6"
+                              placeholder="Décrivez objectivement les faits constatés sur le terrain..." required></textarea>
+                    <small class="text-muted mt-1 d-block"><i class="fa-solid fa-shield-halved me-1 text-success"></i>Les termes sensibles seront automatiquement codifiés avant l'enregistrement.</small>
+                </div>
+
+                <div class="step-nav-divider d-flex justify-content-between">
+                    <button type="button" class="wizard-btn-prev wizard-prev">
+                        <i class="fa-solid fa-arrow-left me-1"></i>Précédent
+                    </button>
+                    <button type="button" class="wizard-btn-next wizard-next">
+                        Suivant <i class="fa-solid fa-arrow-right ms-1"></i>
+                    </button>
                 </div>
             </div>
 
+            <!-- ═══════════════════════════════════════════════
+                 ÉTAPE 3 — ANALYSE & RECOMMANDATIONS
+                 ═══════════════════════════════════════════════ -->
             <div id="step-3" class="content" role="tabpanel" aria-labelledby="step-3-trigger">
-                <div class="row g-3">
-                    <div class="col-12">
-                        <label class="form-label">Constats / Analyse *</label>
-                        <textarea class="form-control" name="analyse" rows="5" required></textarea>
-                    </div>
-                    <div class="col-12">
-                        <label class="form-label">Besoins prioritaires *</label>
-                        <textarea class="form-control" name="priority_needs" rows="5" required></textarea>
-                    </div>
-                    <div class="col-12">
-                        <label class="form-label">Recommandations *</label>
-                        <textarea class="form-control" name="recommandations" rows="5" required></textarea>
-                    </div>
+                <p class="step-ux-hint"><i class="fa-solid fa-magnifying-glass-chart me-2 text-primary"></i>Complétez votre analyse humanitaire et proposez des recommandations...</p>
+
+                <div class="step-card">
+                    <label class="form-label" for="wiz_analysis_text">Impacts humanitaires &amp; Analyse *
+                        <i class="fa-solid fa-circle-info tooltip-icon text-primary ms-1"
+                           data-bs-toggle="tooltip"
+                           title="Analysez les causes, conséquences et dynamiques de protection liées à cet incident."></i>
+                    </label>
+                    <textarea class="form-control textarea-analysis" name="analysis_text" id="wiz_analysis_text" rows="5"
+                              placeholder="Analysez les causes, les conséquences, les dynamiques de protection observées..." required></textarea>
                 </div>
 
-                <div class="d-flex justify-content-between mt-3">
-                    <button type="button" class="btn btn-light wizard-prev">Retour</button>
-                    <button type="button" class="btn wizard-next">Continuer</button>
+                <div class="step-card mt-3">
+                    <label class="form-label" for="wiz_priority_needs">Besoins prioritaires *
+                        <i class="fa-solid fa-circle-info tooltip-icon text-primary ms-1"
+                           data-bs-toggle="tooltip"
+                           title="Listez les besoins immédiats identifiés pour les personnes affectées (abri, WASH, santé, protection...)"></i>
+                    </label>
+                    <textarea class="form-control textarea-analysis" name="priority_needs" id="wiz_priority_needs" rows="4"
+                              placeholder="Ex: Abri d'urgence, eau potable, assistance psychosociale, sécurité..." required></textarea>
+                </div>
+
+                <div class="step-card mt-3">
+                    <label class="form-label" for="wiz_recommendations_text">Recommandations *
+                        <i class="fa-solid fa-circle-info tooltip-icon text-primary ms-1"
+                           data-bs-toggle="tooltip"
+                           title="Actions concrètes recommandées au Cluster Protection pour répondre à cet incident."></i>
+                    </label>
+                    <textarea class="form-control textarea-analysis" name="recommendations_text" id="wiz_recommendations_text" rows="4"
+                              placeholder="Recommandations opérationnelles à soumettre au Cluster Protection..." required></textarea>
+                </div>
+
+                <div class="step-nav-divider d-flex justify-content-between">
+                    <button type="button" class="wizard-btn-prev wizard-prev">
+                        <i class="fa-solid fa-arrow-left me-1"></i>Précédent
+                    </button>
+                    <button type="button" class="wizard-btn-next wizard-next">
+                        Suivant <i class="fa-solid fa-arrow-right ms-1"></i>
+                    </button>
                 </div>
             </div>
 
+            <!-- ═══════════════════════════════════════════════
+                 ÉTAPE 4 — PREUVES & VALIDATION
+                 ═══════════════════════════════════════════════ -->
             <div id="step-4" class="content" role="tabpanel" aria-labelledby="step-4-trigger">
-                <label class="form-label">Pièces jointes</label>
-                <div id="wizard-dropzone" class="dropzone rounded-4 border border-2"></div>
-                <small class="text-muted d-block mt-2">Formats autorisés: jpg, jpeg, png, webp, pdf, doc, docx, xls, xlsx, txt.</small>
+                <div class="step-card">
+                    <div class="step-section-title">Pièces jointes (optionnel)</div>
+                    <div id="wizard-dropzone" class="dropzone dz-premium">
+                        <div class="dz-message needsclick">
+                            <i class="fa-solid fa-cloud-arrow-up"></i>
+                            <strong>Glissez-déposez vos fichiers ici</strong><br>
+                            <span class="text-muted" style="font-size:.82rem">ou cliquez pour sélectionner</span>
+                        </div>
+                    </div>
+                    <small class="text-muted d-block mt-2">
+                        <i class="fa-solid fa-circle-check text-success me-1"></i>
+                        Formats autorisés : jpg, jpeg, png, webp, pdf, doc, docx, xls, xlsx, txt — Max 10 Mo par fichier.
+                    </small>
+                </div>
 
-                <div class="d-flex justify-content-between mt-4 flex-wrap gap-2">
-                    <button type="button" class="btn btn-light wizard-prev">Retour</button>
+                <!-- Checklist de validation avant envoi -->
+                <div class="step-card mt-3" id="wizard-recap-card">
+                    <div class="step-section-title">Checklist interactive de validation</div>
+                    <p class="text-muted small mb-3">Veuillez vérifier les éléments ci-dessous avant de soumettre le rapport d'incident. Vous pouvez compléter les informations manquantes en cliquant sur les boutons.</p>
+                    <div id="recapChecklist" class="list-group gap-2 border-0">
+                        <!-- Rempli dynamiquement via JS -->
+                    </div>
+                </div>
+
+                <div class="step-nav-divider d-flex justify-content-between flex-wrap gap-2">
+                    <button type="button" class="wizard-btn-prev wizard-prev">
+                        <i class="fa-solid fa-arrow-left me-1"></i>Précédent
+                    </button>
                     <div class="d-flex gap-2 flex-wrap">
-                        <button type="button" class="btn btn-outline-secondary" id="btn-save-draft">Enregistrer comme Brouillon</button>
-                        <button type="button" class="btn btn-primary" id="btn-submit-cluster">Soumettre au Cluster</button>
+                        <button type="button" class="btn btn-outline-secondary btn-save-draft rounded-pill" id="btnSaveDraft">
+                            <i class="fa-regular fa-floppy-disk me-1"></i>Sauvegarder le brouillon
+                        </button>
+                        <button type="button" class="btn-submit-cluster" id="btnSubmitCluster">
+                            <i class="fa-solid fa-paper-plane me-1"></i>Soumettre l'alerte
+                        </button>
                     </div>
                 </div>
             </div>
@@ -190,220 +624,551 @@ $wizardDraftIdValue = (int) ($wizardDraftId ?? 0);
     </div>
 </div>
 
-<style>
-.wizard-shell {
-    border: 1px solid #dbeafe;
-}
-.wizard-shell .btn-primary,
-.wizard-shell .wizard-next {
-    background: #005BBB;
-    border-color: #005BBB;
-    color: #fff;
-}
-.wizard-shell .wizard-next:hover,
-.wizard-shell .btn-primary:hover {
-    background: #004b99;
-    border-color: #004b99;
-}
-.bs-stepper .step-trigger {
-    background: transparent;
-}
-.bs-stepper .bs-stepper-circle {
-    background-color: #0f172a;
-}
-.bs-stepper .active .bs-stepper-circle {
-    background-color: #005BBB;
-}
-.gps-readonly {
-    background: #f1f5f9;
-    color: #334155;
-    font-weight: 600;
-}
-.wizard-location-map {
-    width: 100%;
-    min-height: 320px;
-    border-radius: 14px;
-    border: 1px solid #cbd5e1;
-    overflow: hidden;
-}
-</style>
 
 <script src="https://cdn.jsdelivr.net/npm/bs-stepper/dist/js/bs-stepper.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dropzone@5.9.3/dist/min/dropzone.min.js"></script>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
 <script>
 (function () {
-    var form = document.getElementById('report-wizard-form');
-    var stepperEl = document.getElementById('report-stepper');
-    if (!form || !stepperEl || typeof window.Stepper === 'undefined') {
-        return;
-    }
+    // ─────────────────────────────────────────────
+    // 1. RÉFÉRENCES DOM
+    // ─────────────────────────────────────────────
+    var form           = document.getElementById('report-wizard-form');
+    var stepperEl      = document.getElementById('report-stepper');
+    if (!form || !stepperEl) { return; }
 
-    var stepper = new window.Stepper(stepperEl, { linear: true, animation: true });
-    var statusInput = document.getElementById('status_action');
-    var draftIdInput = document.getElementById('draft_id');
-    var btnSaveDraftSticky = document.getElementById('btn-save-draft-sticky');
+    var statusInput    = document.getElementById('status_action');
+    var draftIdInput   = document.getElementById('draft_id');
+    var gpsLatInput    = document.getElementById('gps_lat');
+    var gpsLngInput    = document.getElementById('gps_lng');
+    var provinceInput  = document.getElementById('wiz_province');
+    var territoryInput = document.getElementById('wiz_territory');
+    var villageInput   = document.getElementById('wiz_village');
     var wizardDraftData = <?= $wizardDraftPayload; ?>;
-    var gpsLatInput = document.getElementById('gps_lat');
-    var gpsLngInput = document.getElementById('gps_lng');
-    var provinceInput = form.querySelector('input[name="province"]');
-    var territoryInput = form.querySelector('input[name="territory"]');
-    var villageInput = form.querySelector('input[name="village"]');
-    var searchInput = document.getElementById('location-search-input');
-    var searchBtn = document.getElementById('btn-search-place');
-    var wizardMap = null;
-    var wizardMarker = null;
 
-    function swAlert(icon, title, text) {
-        if (window.Swal && typeof window.Swal.fire === 'function') {
-            return window.Swal.fire({
-                icon: icon,
-                title: title,
-                text: text,
-                confirmButtonColor: '#005BBB'
-            });
-        }
-        window.alert(title + ' - ' + text);
-        return Promise.resolve();
-    }
+    var wizardGoogleMap  = null;
+    var wizardMapMarker  = null;
+    var hasGoogleMaps    = false;
 
-    function setGps(lat, lng) {
-        if (gpsLatInput) {
-            gpsLatInput.value = Number(lat).toFixed(7);
-        }
-        if (gpsLngInput) {
-            gpsLngInput.value = Number(lng).toFixed(7);
+    // ─────────────────────────────────────────────
+    // 2. STEPPER
+    // ─────────────────────────────────────────────
+    var stepper = null;
+    if (typeof window.Stepper !== 'undefined') {
+        stepper = new window.Stepper(stepperEl, { linear: true, animation: true });
+        var urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('step') === '4') {
+            setTimeout(function() { stepper.to(4); }, 100);
         }
     }
 
-    function normalizeAddressField(value) {
-        return String(value || '').trim();
+    // ─────────────────────────────────────────────
+    // 3. TOOLTIPS BOOTSTRAP
+    // ─────────────────────────────────────────────
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+        if (window.bootstrap && window.bootstrap.Tooltip) {
+            new window.bootstrap.Tooltip(el, { trigger: 'hover focus' });
+        }
+    });
+
+    // ─────────────────────────────────────────────
+    // 4. LEAFLET MAPS INIT
+    // ─────────────────────────────────────────────
+    var wizardLeafletMap = null;
+    var wizardLeafletMarker = null;
+
+    function initWizardLeafletMap() {
+        var mapEl = document.getElementById('wizard-leaflet-map');
+        if (!mapEl || typeof L === 'undefined') { return; }
+
+        // Centre sur la RDC (Est)
+        var defaultCenter = [-2.9, 28.7];
+
+        wizardLeafletMap = L.map('wizard-leaflet-map').setView(defaultCenter, 8);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(wizardLeafletMap);
+
+        wizardLeafletMap.on('click', function(e) {
+            var lat = e.latlng.lat;
+            var lng = e.latlng.lng;
+            setGps(lat, lng);
+            placeLeafletMarker(lat, lng);
+            reverseGeocodeOSM(lat, lng);
+        });
+
+        // Si coordonnées GPS déjà présentes (brouillon), centrer la carte
+        var existingLat = parseFloat(gpsLatInput ? gpsLatInput.value : '');
+        var existingLng = parseFloat(gpsLngInput ? gpsLngInput.value : '');
+        if (!isNaN(existingLat) && !isNaN(existingLng) && existingLat !== 0) {
+            wizardLeafletMap.setView([existingLat, existingLng], 12);
+            placeLeafletMarker(existingLat, existingLng);
+        }
     }
 
-    function fillAddressFields(address) {
-        var adr = address || {};
-        var province = normalizeAddressField(adr.state || adr.region || adr.state_district || adr.county);
-        var territory = normalizeAddressField(adr.county || adr.city || adr.town || adr.municipality || adr.village || adr.suburb);
-        var village = normalizeAddressField(adr.village || adr.hamlet || adr.suburb || adr.neighbourhood || adr.quarter || adr.road);
-
-        if (province && provinceInput) {
-            provinceInput.value = province;
-        }
-        if (territory && territoryInput) {
-            territoryInput.value = territory;
-        }
-        if (village && villageInput) {
-            villageInput.value = village;
-        }
-    }
-
-    function placeMarker(lat, lng) {
-        if (!wizardMap || !window.L) {
-            return;
-        }
-
-        var point = [lat, lng];
-        if (!wizardMarker) {
-            wizardMarker = window.L.marker(point, { draggable: true }).addTo(wizardMap);
-            wizardMarker.on('dragend', function (event) {
-                var pos = event.target.getLatLng();
-                onMapLocationSelected(pos.lat, pos.lng);
+    function placeLeafletMarker(lat, lng) {
+        if (!wizardLeafletMap) return;
+        if (!wizardLeafletMarker) {
+            // Icone par défaut de Leaflet
+            wizardLeafletMarker = L.marker([lat, lng], { draggable: true }).addTo(wizardLeafletMap);
+            wizardLeafletMarker.on('dragend', function(e) {
+                var newPos = e.target.getLatLng();
+                setGps(newPos.lat, newPos.lng);
+                reverseGeocodeOSM(newPos.lat, newPos.lng);
             });
         } else {
-            wizardMarker.setLatLng(point);
+            wizardLeafletMarker.setLatLng([lat, lng]);
         }
     }
 
-    function reverseGeocode(lat, lng) {
-        var url = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=' + encodeURIComponent(String(lat))
-            + '&lon=' + encodeURIComponent(String(lng))
-            + '&addressdetails=1&accept-language=fr';
+    function reverseGeocodeOSM(lat, lng) {
+        fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`)
+            .then(r => r.json())
+            .then(data => {
+                if (data && data.address) {
+                    var province = data.address.state || '';
+                    var territory = data.address.county || data.address.city || '';
+                    var village = data.address.village || data.address.town || data.address.suburb || '';
 
-        return fetch(url, {
-            headers: {
-                'Accept': 'application/json'
-            }
-        }).then(function (res) {
-            if (!res.ok) {
-                throw new Error('Reverse geocoding indisponible (HTTP ' + res.status + ')');
-            }
-            return res.json();
-        });
-    }
-
-    function searchPlace(query) {
-        var url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&addressdetails=1&accept-language=fr&q=' + encodeURIComponent(query);
-
-        return fetch(url, {
-            headers: {
-                'Accept': 'application/json'
-            }
-        }).then(function (res) {
-            if (!res.ok) {
-                throw new Error('Recherche indisponible (HTTP ' + res.status + ')');
-            }
-            return res.json();
-        });
-    }
-
-    function onMapLocationSelected(lat, lng) {
-        setGps(lat, lng);
-        placeMarker(lat, lng);
-
-        reverseGeocode(lat, lng)
-            .then(function (data) {
-                fillAddressFields(data && data.address ? data.address : {});
+                    if (province && provinceInput) provinceInput.value = province;
+                    if (territory && territoryInput) territoryInput.value = territory;
+                    if (village && villageInput) villageInput.value = village;
+                }
             })
-            .catch(function () {
-                swAlert('warning', 'Localisation partielle', 'Coordonnées trouvées, mais impossible de récupérer automatiquement les champs administratifs.');
-            });
+            .catch(err => console.error("Erreur de geocoding inverse OSM:", err));
+    }
+    
+    setTimeout(initWizardLeafletMap, 300);
+
+    // ─────────────────────────────────────────────
+    // 4.b. AUTOCOMPLETE OSM (Nominatim)
+    // ─────────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', function() {
+        const searchInput = document.getElementById('place_search');
+        const resultsContainer = document.getElementById('search_results');
+
+        if (!searchInput || !resultsContainer) return; // Sécurité
+
+        searchInput.addEventListener('input', function() {
+            let query = this.value.trim();
+            
+            if (query.length < 3) {
+                resultsContainer.style.display = 'none';
+                return;
+            }
+
+            // Appel à l'API gratuite Nominatim (restreint à la RDC)
+            fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=cd&limit=5`)
+                .then(response => response.json())
+                .then(data => {
+                    resultsContainer.innerHTML = '';
+                    if (data.length > 0) {
+                        resultsContainer.style.display = 'block';
+                        data.forEach(place => {
+                            let li = document.createElement('li');
+                            li.className = 'list-group-item list-group-item-action cursor-pointer';
+                            li.style.cursor = 'pointer';
+                            // Nettoyer le nom pour n'afficher que l'essentiel
+                            li.textContent = place.display_name;
+                            
+                            li.onclick = function() {
+                                // Remplir la barre de recherche avec le nom court
+                                searchInput.value = place.name || place.display_name.split(',')[0];
+                                
+                                // Remplir les champs GPS cachés ou visibles
+                                let latInput = document.querySelector('input[name="latitude"]') || document.getElementById('gps_lat');
+                                let lngInput = document.querySelector('input[name="longitude"]') || document.getElementById('gps_lng');
+                                
+                                if(latInput) latInput.value = place.lat;
+                                if(lngInput) lngInput.value = place.lon;
+                                
+                                // Centrer la carte si possible
+                                if (typeof wizardLeafletMap !== 'undefined' && wizardLeafletMap) {
+                                    wizardLeafletMap.setView([place.lat, place.lon], 13);
+                                    if (typeof placeLeafletMarker === 'function') {
+                                        placeLeafletMarker(place.lat, place.lon);
+                                    }
+                                }
+                                
+                                // Cacher la liste après sélection
+                                resultsContainer.style.display = 'none';
+                            };
+                            resultsContainer.appendChild(li);
+                        });
+                    } else {
+                        resultsContainer.innerHTML = '<li class="list-group-item text-muted">Aucun résultat trouvé en RDC</li>';
+                        resultsContainer.style.display = 'block';
+                    }
+                }).catch(err => {
+                    console.error("Erreur de recherche OSM:", err);
+                });
+        });
+
+        // Cacher les résultats si on clique ailleurs sur la page
+        document.addEventListener('click', function(e) {
+            if (e.target.id !== 'place_search') {
+                resultsContainer.style.display = 'none';
+            }
+        });
+    });
+
+    // ─────────────────────────────────────────────
+    // 5. GPS NATIF (FALLBACK)
+    // ─────────────────────────────────────────────
+    function setGps(lat, lng) {
+        if (gpsLatInput) { gpsLatInput.value = Number(lat).toFixed(7); }
+        if (gpsLngInput) { gpsLngInput.value = Number(lng).toFixed(7); }
     }
 
-    function initWizardMap() {
-        var mapEl = document.getElementById('wizard-location-map');
-        if (!mapEl || !window.L || wizardMap) {
-            return;
-        }
-
-        wizardMap = window.L.map(mapEl, {
-            zoomControl: true,
-            minZoom: 6,
-            maxZoom: 17
-        }).setView([-2.9, 28.7], 8);
-
-        window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap contributors'
-        }).addTo(wizardMap);
-
-        wizardMap.on('click', function (event) {
-            onMapLocationSelected(event.latlng.lat, event.latlng.lng);
+    var btnGeoloc = document.getElementById('btn-geoloc');
+    if (btnGeoloc) {
+        btnGeoloc.addEventListener('click', function () {
+            if (!navigator.geolocation) {
+                showAlert('warning', 'Indisponible', 'La géolocalisation n\'est pas disponible sur ce navigateur.');
+                return;
+            }
+            btnGeoloc.disabled = true;
+            btnGeoloc.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>Localisation...';
+            navigator.geolocation.getCurrentPosition(
+                function (pos) {
+                    var lat = pos.coords.latitude;
+                    var lng = pos.coords.longitude;
+                    setGps(lat, lng);
+                    if (wizardLeafletMap) {
+                        wizardLeafletMap.setView([lat, lng], 14);
+                        placeLeafletMarker(lat, lng);
+                        reverseGeocodeOSM(lat, lng);
+                    }
+                    btnGeoloc.disabled = false;
+                    btnGeoloc.innerHTML = '<i class="fa-solid fa-location-crosshairs me-1"></i>Ma position';
+                },
+                function (err) {
+                    var msgs = {
+                        1: 'Accès refusé. Autorisez la localisation dans les paramètres du navigateur.',
+                        2: 'Signal GPS introuvable. Réessayez près d\'une fenêtre.',
+                        3: 'Délai expiré. Votre connexion est peut-être lente.'
+                    };
+                    showAlert('error', 'Erreur GPS', msgs[err.code] || 'Impossible de récupérer votre position.');
+                    btnGeoloc.disabled = false;
+                    btnGeoloc.innerHTML = '<i class="fa-solid fa-location-crosshairs me-1"></i>Ma position';
+                },
+                { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+            );
         });
     }
 
+    // ─────────────────────────────────────────────
+    // 6. NAVIGATION WIZARD (Suivant / Précédent)
+    // ─────────────────────────────────────────────
     function currentStepPane() {
         return form.querySelector('.content.dstepper-block');
     }
 
     function validateStep(stepPane) {
-        if (!stepPane) {
-            return true;
-        }
-
-        var requiredFields = stepPane.querySelectorAll('[required]');
-        for (var i = 0; i < requiredFields.length; i++) {
-            if (!requiredFields[i].checkValidity()) {
-                requiredFields[i].reportValidity();
+        if (!stepPane) { return true; }
+        var fields = stepPane.querySelectorAll('[required]');
+        for (var i = 0; i < fields.length; i++) {
+            if (!fields[i].checkValidity()) {
+                fields[i].reportValidity();
                 return false;
             }
         }
         return true;
     }
 
-    function hydrateFormFromDraft(draft) {
-        if (!draft || typeof draft !== 'object') {
-            return;
+    // ─────────────────────────────────────────────
+    // 6.b. AUTO-SAVE SILENCIEUX (brouillon) à chaque "Suivant"
+    // ─────────────────────────────────────────────
+    var autoSaveIndicator = null;
+
+    function showAutoSaveIndicator(state) {
+        // state: 'saving' | 'saved' | 'error'
+        if (!autoSaveIndicator) {
+            autoSaveIndicator = document.createElement('div');
+            autoSaveIndicator.id = 'autosave-indicator';
+            autoSaveIndicator.style.cssText = [
+                'position:fixed',
+                'bottom:24px',
+                'left:50%',
+                'transform:translateX(-50%)',
+                'background:#1e293b',
+                'color:#f1f5f9',
+                'font-size:0.78rem',
+                'font-weight:500',
+                'padding:7px 18px',
+                'border-radius:50px',
+                'box-shadow:0 4px 16px rgba(0,0,0,.18)',
+                'z-index:9999',
+                'transition:opacity .3s ease',
+                'pointer-events:none',
+                'display:flex',
+                'align-items:center',
+                'gap:7px'
+            ].join(';');
+            document.body.appendChild(autoSaveIndicator);
+        }
+        if (state === 'saving') {
+            autoSaveIndicator.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="font-size:.75rem"></i> Sauvegarde automatique...';
+            autoSaveIndicator.style.opacity = '1';
+        } else if (state === 'saved') {
+            autoSaveIndicator.innerHTML = '<i class="fa-solid fa-check" style="color:#34d399;font-size:.75rem"></i> Brouillon sauvegardé';
+            autoSaveIndicator.style.opacity = '1';
+            window.clearTimeout(autoSaveIndicator._hideTimer);
+            autoSaveIndicator._hideTimer = window.setTimeout(function () {
+                autoSaveIndicator.style.opacity = '0';
+            }, 2500);
+        } else if (state === 'error') {
+            autoSaveIndicator.innerHTML = '<i class="fa-solid fa-triangle-exclamation" style="color:#f87171;font-size:.75rem"></i> Sauvegarde impossible';
+            autoSaveIndicator.style.opacity = '1';
+            window.clearTimeout(autoSaveIndicator._hideTimer);
+            autoSaveIndicator._hideTimer = window.setTimeout(function () {
+                autoSaveIndicator.style.opacity = '0';
+            }, 3000);
+        }
+    }
+
+    function saveDraftSilent(callback) {
+        statusInput.value = 'Brouillon';
+        var payload = new FormData(form);
+        payload.append('action', 'save_report_wizard');
+
+        showAutoSaveIndicator('saving');
+
+        fetch('api/save_report.php', {
+            method: 'POST',
+            body: payload,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+            if (data && data.ok === true) {
+                // Met à jour le draft_id si c'est un nouveau brouillon
+                if (draftIdInput && Number(data.report_id || 0) > 0) {
+                    draftIdInput.value = String(Number(data.report_id));
+                }
+                showAutoSaveIndicator('saved');
+            } else {
+                showAutoSaveIndicator('error');
+            }
+            if (typeof callback === 'function') { callback(); }
+        })
+        .catch(function () {
+            showAutoSaveIndicator('error');
+            if (typeof callback === 'function') { callback(); }
+        });
+    }
+
+    form.querySelectorAll('.wizard-next').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            if (!validateStep(currentStepPane())) { return; }
+            // Sauvegarde silencieuse du brouillon AVANT de passer à l'étape suivante
+            saveDraftSilent(function () {
+                if (stepper) { stepper.next(); }
+            });
+        });
+    });
+
+
+    form.querySelectorAll('.wizard-prev').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            if (stepper) { stepper.previous(); }
+        });
+    });
+
+    // ─────────────────────────────────────────────
+    // 7. CHECKLIST INTERACTIVE ÉTAPE 4
+    // ─────────────────────────────────────────────
+    stepperEl.addEventListener('show.bs-stepper', function (e) {
+        if (e && e.detail && e.detail.to === 3) {
+            updateChecklistUI();
+        }
+    });
+    stepperEl.addEventListener('shown.bs-stepper', function (e) {
+        if (e && e.detail && e.detail.indexStep === 3) {
+            updateChecklistUI();
+        }
+    });
+
+    window.getLocation = function() {
+        var btn = document.getElementById('btn-geoloc');
+        if (btn) { btn.click(); }
+    };
+
+    function updateChecklistUI() {
+        const recapContainer = document.getElementById('recapChecklist');
+        if (!recapContainer) return;
+        recapContainer.innerHTML = ''; // Vider avant de remplir
+
+        // 1. Vérification Localisation (Étape 1)
+        const provinceEl = document.getElementById('wiz_province');
+        const province = provinceEl ? provinceEl.value.trim() : '';
+        const isLocationMissing = !province || province === 'Non renseigné' || province === '—' || province === '0';
+        recapContainer.innerHTML += createChecklistItem(
+            '📍 Localisation (Province, Territoire, Village)', 
+            isLocationMissing, 
+            1 // Numéro de l'étape pour le stepper (1-indexed pour stepper.to())
+        );
+
+        // 2. Vérification GPS (Étape 1) - TRÈS IMPORTANT
+        const latEl = document.getElementById('gps_lat');
+        const lat = latEl ? latEl.value.trim() : '';
+        const isGPSMissing = !lat || lat === '—' || lat === '0' || lat === '';
+        
+        recapContainer.innerHTML += `
+            <div class="list-group-item d-flex justify-content-between align-items-center ${isGPSMissing ? 'bg-danger-subtle border-danger text-danger-emphasis' : 'bg-success-subtle border-success text-success-emphasis'}" style="border-radius: 12px; margin-bottom: 8px; border: 1.5px solid !important; padding: 14px 20px;">
+                <div class="text-start">
+                    <i class="fa-solid ${isGPSMissing ? 'fa-location-crosshairs text-danger' : 'fa-check text-success'} me-2 fs-5"></i>
+                    <strong>Coordonnées GPS</strong>
+                    ${isGPSMissing ? '<br><small class="text-danger d-block mt-1 fw-medium"><i class="fa-solid fa-circle-exclamation me-1"></i> Obligatoire pour la cartographie. Cliquez sur le bouton pour capter le GPS.</small>' : ''}
+                </div>
+                ${isGPSMissing ? '<button type="button" class="btn btn-sm btn-danger rounded-pill shadow-sm px-3 py-1.5 fw-semibold" onclick="getLocation()"><i class="fa-solid fa-satellite-dish me-1"></i> Capter le GPS</button>' : '<span class="badge bg-success rounded-pill px-3 py-1.5 fs-7">OK</span>'}
+            </div>
+        `;
+
+        // 3. Vérification Bilan & Faits (Étape 2)
+        const factsEl = document.getElementById('wiz_facts_text');
+        const facts = factsEl ? factsEl.value.trim() : '';
+        const isFactsMissing = !facts || facts === 'Non renseigné' || facts === '—' || facts === '0';
+        recapContainer.innerHTML += createChecklistItem(
+            '⚠️ Faits et Bilan (Victimes, Déplacés, Résumé)', 
+            isFactsMissing, 
+            2
+        );
+
+        // 4. Vérification Recommandations (Étape 3)
+        const recsEl = document.getElementById('wiz_recommendations_text');
+        const recs = recsEl ? recsEl.value.trim() : '';
+        const isRecsMissing = !recs || recs === 'Non renseigné' || recs === '—' || recs === '0';
+        recapContainer.innerHTML += createChecklistItem(
+            '💡 Recommandations et Analyse', 
+            isRecsMissing, 
+            3
+        );
+    }
+
+    function createChecklistItem(title, isMissing, stepNumber) {
+        if (isMissing) {
+            return `
+            <div class="list-group-item d-flex justify-content-between align-items-center bg-warning-subtle border-warning text-warning-emphasis" style="border-radius: 12px; margin-bottom: 8px; border: 1.5px solid !important; padding: 14px 20px;">
+                <span class="text-start"><i class="fa-solid fa-triangle-exclamation text-warning me-2 fs-5"></i> <strong>${title}</strong> : <span class="badge bg-warning text-dark ms-1">Incomplet</span></span>
+                <button type="button" class="btn btn-sm btn-warning rounded-pill px-3 py-1.5 fw-semibold" onclick="if(typeof stepper !== 'undefined' && stepper) { stepper.to(${stepNumber}); }">Compléter <i class="fa-solid fa-arrow-right ms-1"></i></button>
+            </div>`;
+        } else {
+            return `
+            <div class="list-group-item d-flex justify-content-between align-items-center bg-success-subtle border-success text-success-emphasis" style="border-radius: 12px; margin-bottom: 8px; border: 1.5px solid !important; padding: 14px 20px;">
+                <span class="text-start"><i class="fa-solid fa-check text-success me-2 fs-5"></i> <strong>${title}</strong></span>
+                <span class="badge bg-success rounded-pill px-3 py-1.5 fs-7">OK</span>
+            </div>`;
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    // 8. DROPZONE.JS
+    // ─────────────────────────────────────────────
+    var dropzone = null;
+    if (typeof window.Dropzone !== 'undefined') {
+        window.Dropzone.autoDiscover = false;
+        dropzone = new window.Dropzone('#wizard-dropzone', {
+            url: '/noop',
+            autoProcessQueue: false,
+            uploadMultiple: true,
+            parallelUploads: 10,
+            addRemoveLinks: true,
+            acceptedFiles: '.jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.xls,.xlsx,.txt',
+            maxFilesize: 10,
+            dictDefaultMessage: '',
+            dictRemoveFile: '✕ Retirer'
+        });
+    }
+
+    // ─────────────────────────────────────────────
+    // 9. SAUVEGARDE AJAX
+    // ─────────────────────────────────────────────
+    function showAlert(icon, title, text) {
+        if (window.premiumAlert && typeof window.premiumAlert.fire === 'function') {
+            return window.premiumAlert.fire({ icon: icon, title: title, text: text });
+        }
+        if (window.Swal) {
+            return window.Swal.fire({ icon: icon, title: title, text: text, confirmButtonColor: '#005BBB' });
+        }
+        window.alert(title + '\n' + text);
+        return Promise.resolve();
+    }
+
+    function submitWizard(targetStatus) {
+        if (targetStatus !== 'Brouillon' && !validateStep(currentStepPane())) { return; }
+
+        statusInput.value = targetStatus;
+        var payload = new FormData(form);
+        payload.append('action', 'save_report_wizard');
+
+        if (dropzone) {
+            dropzone.getAcceptedFiles().forEach(function (file) {
+                payload.append('files[]', file, file.name);
+            });
         }
 
+        var submitBtn = targetStatus === 'Brouillon'
+            ? document.getElementById('btnSaveDraft')
+            : document.getElementById('btnSubmitCluster');
+
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>Enregistrement...';
+        }
+
+        fetch('api/save_report.php', {
+            method: 'POST',
+            body: payload,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+            if (!data || data.ok !== true) {
+                throw new Error((data && data.message) ? data.message : 'Enregistrement impossible.');
+            }
+
+            showAlert(
+                'success',
+                targetStatus === 'Brouillon' ? '✅ Brouillon sauvegardé' : '🎉 Alerte soumise !',
+                targetStatus === 'Brouillon'
+                    ? 'Votre brouillon a été enregistré. Vous pouvez y revenir à tout moment.'
+                    : String(data.message || 'Votre alerte a été soumise au Cluster Protection.')
+            ).then(function () {
+                if (targetStatus !== 'Brouillon') {
+                    window.location.href = '?page=rapportage-liste-user';
+                } else if (draftIdInput && Number(data.report_id || 0) > 0) {
+                    draftIdInput.value = String(Number(data.report_id));
+                }
+            });
+        })
+        .catch(function (err) {
+            showAlert('error', 'Erreur', err.message || 'Erreur lors de la sauvegarde.');
+        })
+        .finally(function () {
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = targetStatus === 'Brouillon'
+                    ? '<i class="fa-regular fa-floppy-disk me-1"></i>Sauvegarder le brouillon'
+                    : '<i class="fa-solid fa-paper-plane me-1"></i>Soumettre l\'alerte';
+            }
+        });
+    }
+
+    // Boutons d'action
+    var btnSaveDraft        = document.getElementById('btnSaveDraft');
+    var btnSaveDraftSticky  = document.getElementById('btn-save-draft-sticky');
+    var btnSubmitCluster    = document.getElementById('btnSubmitCluster');
+
+    if (btnSaveDraft)       { btnSaveDraft.addEventListener('click',       function () { submitWizard('Brouillon'); }); }
+    if (btnSaveDraftSticky) { btnSaveDraftSticky.addEventListener('click', function () { submitWizard('Brouillon'); }); }
+    if (btnSubmitCluster)   { btnSubmitCluster.addEventListener('click',   function () { submitWizard('Soumis');    }); }
+
+    // ─────────────────────────────────────────────
+    // 10. HYDRATATION depuis brouillon existant
+    // ─────────────────────────────────────────────
+    function hydrateFormFromDraft(draft) {
+        if (!draft || typeof draft !== 'object') { return; }
         var mapping = {
             province: 'province',
             territory: 'territory',
@@ -414,306 +1179,59 @@ $wizardDraftIdValue = (int) ($wizardDraftId ?? 0);
             urgency_level: 'urgency_level',
             victims_count: 'victims_count',
             displaced_households: 'displaced_households',
-            description: 'description',
-            analyse: 'analyse',
-            priority_needs: 'priority_needs',
-            recommandations: 'recommandations'
+            // Nouvelles colonnes correctes
+            facts_text: 'facts_text',
+            analysis_text: 'analysis_text',
+            recommendations_text: 'recommendations_text',
+            priority_needs: 'priority_needs'
         };
-
-        Object.keys(mapping).forEach(function (sourceKey) {
-            var fieldName = mapping[sourceKey];
-            var field = form.querySelector('[name="' + fieldName + '"]');
-            if (!field) {
-                return;
-            }
-            var value = draft[sourceKey];
-            if (value === null || typeof value === 'undefined') {
-                return;
-            }
-            field.value = String(value);
+        Object.keys(mapping).forEach(function (srcKey) {
+            var fieldName = mapping[srcKey];
+            var el = form.querySelector('[name="' + fieldName + '"]');
+            if (!el) { return; }
+            var val = draft[srcKey];
+            if (val === null || val === undefined) { return; }
+            el.value = String(val);
         });
-
         if (draftIdInput && Number(draft.id || 0) > 0) {
             draftIdInput.value = String(Number(draft.id));
         }
-
         var lat = Number(draft.gps_lat || 0);
         var lng = Number(draft.gps_lng || 0);
-        if (!Number.isNaN(lat) && !Number.isNaN(lng) && lat !== 0 && lng !== 0) {
+        if (!isNaN(lat) && !isNaN(lng) && lat !== 0) {
             setGps(lat, lng);
-            placeMarker(lat, lng);
-            if (wizardMap) {
-                wizardMap.setView([lat, lng], 10);
-            }
         }
     }
 
-    function hydrateFormFromAiPrefill() {
+    function hydrateFromAiPrefill() {
         var raw = '';
-        try {
-            raw = window.sessionStorage.getItem('sydra_ia_prefill') || '';
-        } catch (e) {
-            raw = '';
-        }
-
-        if (raw === '') {
-            return;
-        }
-
-        var prefill = null;
-        try {
-            prefill = JSON.parse(raw);
-        } catch (e) {
-            prefill = null;
-        }
-
-        if (!prefill || typeof prefill !== 'object') {
-            return;
-        }
-
-        var mapping = {
+        try { raw = window.sessionStorage.getItem('sydra_ia_prefill') || ''; } catch (e) {}
+        if (!raw) { return; }
+        var prefill;
+        try { prefill = JSON.parse(raw); } catch (e) { prefill = null; }
+        if (!prefill) { return; }
+        var aiMapping = {
             incident_type: 'incident_type',
             urgency_level: 'urgency_level',
-            description: 'description',
-            analyse: 'analyse',
+            // L'IA génère description → on met dans facts_text
+            description: 'facts_text',
+            analyse: 'analysis_text',
             priority_needs: 'priority_needs',
-            recommandations: 'recommandations',
+            recommandations: 'recommendations_text',
             victims_count: 'victims_count',
             displaced_households: 'displaced_households'
         };
-
-        Object.keys(mapping).forEach(function (sourceKey) {
-            var field = form.querySelector('[name="' + mapping[sourceKey] + '"]');
-            if (!field) {
-                return;
-            }
-            var value = prefill[sourceKey];
-            if (value === null || typeof value === 'undefined') {
-                return;
-            }
-            field.value = String(value);
+        Object.keys(aiMapping).forEach(function (src) {
+            var el = form.querySelector('[name="' + aiMapping[src] + '"]');
+            if (!el) { return; }
+            var val = prefill[src];
+            if (val === null || val === undefined) { return; }
+            el.value = String(val);
         });
-
-        try {
-            window.sessionStorage.removeItem('sydra_ia_prefill');
-        } catch (e) {
-            // ignore storage errors
-        }
-    }
-
-    form.querySelectorAll('.wizard-next').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            if (!validateStep(currentStepPane())) {
-                return;
-            }
-            stepper.next();
-        });
-    });
-
-    form.querySelectorAll('.wizard-prev').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            stepper.previous();
-        });
-    });
-
-    var btnGeoloc = document.getElementById('btn-geoloc');
-    if (btnGeoloc) {
-        btnGeoloc.addEventListener('click', function () {
-            if (!navigator.geolocation) {
-                swAlert('warning', 'Indisponible', 'La géolocalisation n est pas disponible.');
-                return;
-            }
-
-            navigator.geolocation.getCurrentPosition(function (position) {
-                var lat = Number(position.coords.latitude || 0);
-                var lng = Number(position.coords.longitude || 0);
-
-                if (!wizardMap) {
-                    initWizardMap();
-                }
-
-                if (wizardMap) {
-                    wizardMap.setView([lat, lng], 13);
-                }
-
-                onMapLocationSelected(lat, lng);
-            }, function (error) {
-                var title = 'Erreur GPS';
-                var message = 'Impossible de récupérer votre position.';
-
-                if (error && error.code === error.PERMISSION_DENIED) {
-                    title = 'Accès refusé';
-                    message = 'Vous avez refusé l\'accès. Conseil : Allez dans les paramètres de votre navigateur (le cadenas) pour autoriser la position.';
-                } else if (error && error.code === error.POSITION_UNAVAILABLE) {
-                    title = 'Signal GPS introuvable';
-                    message = 'Signal GPS introuvable. Conseil : Activez le GPS de votre appareil ou mettez-vous près d\'une fenêtre.';
-                } else if (error && error.code === error.TIMEOUT) {
-                    title = 'Recherche expirée';
-                    message = 'Le temps de recherche a expiré. Conseil : Votre connexion est faible, cliquez manuellement sur la carte.';
-                }
-
-                swAlert('error', title, message);
-            }, {
-                enableHighAccuracy: true,
-                timeout: 12000,
-                maximumAge: 0
-            });
-        });
-    }
-
-    if (searchBtn) {
-        searchBtn.addEventListener('click', function () {
-            var query = String(searchInput && searchInput.value ? searchInput.value : '').trim();
-            if (query === '') {
-                swAlert('info', 'Recherche vide', 'Saisissez un lieu avant de lancer la recherche.');
-                return;
-            }
-
-            if (!wizardMap) {
-                initWizardMap();
-            }
-
-            searchBtn.disabled = true;
-            searchBtn.textContent = 'Recherche...';
-
-            searchPlace(query)
-                .then(function (results) {
-                    if (!Array.isArray(results) || results.length === 0) {
-                        throw new Error('Aucun lieu trouvé pour cette recherche.');
-                    }
-
-                    var hit = results[0];
-                    var lat = Number(hit.lat || 0);
-                    var lng = Number(hit.lon || 0);
-                    if (Number.isNaN(lat) || Number.isNaN(lng)) {
-                        throw new Error('Coordonnées invalides retournées par la recherche.');
-                    }
-
-                    wizardMap.setView([lat, lng], 13);
-                    setGps(lat, lng);
-                    placeMarker(lat, lng);
-                    fillAddressFields(hit.address || {});
-                })
-                .catch(function (err) {
-                    swAlert('warning', 'Recherche impossible', String(err && err.message ? err.message : 'Aucun résultat trouvé.'));
-                })
-                .finally(function () {
-                    searchBtn.disabled = false;
-                    searchBtn.textContent = 'Rechercher';
-                });
-        });
-    }
-
-    if (searchInput) {
-        searchInput.addEventListener('keydown', function (event) {
-            if (event.key === 'Enter') {
-                event.preventDefault();
-                if (searchBtn) {
-                    searchBtn.click();
-                }
-            }
-        });
-    }
-
-    initWizardMap();
-    stepperEl.addEventListener('shown.bs-stepper', function () {
-        if (wizardMap) {
-            window.setTimeout(function () {
-                wizardMap.invalidateSize();
-            }, 80);
-        }
-    });
-
-    window.Dropzone.autoDiscover = false;
-    var dropzone = new window.Dropzone('#wizard-dropzone', {
-        url: '/noop',
-        autoProcessQueue: false,
-        uploadMultiple: true,
-        parallelUploads: 10,
-        addRemoveLinks: true,
-        acceptedFiles: '.jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.xls,.xlsx,.txt',
-        dictDefaultMessage: 'Glissez-déposez vos fichiers ici ou cliquez pour sélectionner.'
-    });
-
-    function submitWizard(targetStatus) {
-        if (targetStatus !== 'Brouillon' && !validateStep(currentStepPane())) {
-            return;
-        }
-
-        statusInput.value = targetStatus;
-        var payload = new FormData(form);
-        payload.append('action', 'save_report_wizard');
-
-        dropzone.getAcceptedFiles().forEach(function (file) {
-            payload.append('files[]', file, file.name);
-        });
-
-        fetch('api/save_report.php', {
-            method: 'POST',
-            body: payload,
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        })
-            .then(function (res) { return res.json(); })
-            .then(function (data) {
-                if (!data || data.ok !== true) {
-                    throw new Error((data && data.message) ? data.message : 'Enregistrement impossible.');
-                }
-
-                if (window.Swal && window.Swal.fire) {
-                    window.Swal.fire({
-                        icon: 'success',
-                        title: targetStatus === 'Brouillon' ? 'Brouillon sauvegardé' : 'Rapport enregistré',
-                        text: targetStatus === 'Brouillon'
-                            ? 'Brouillon sauvegardé. Ce rapport ne sera pas soumis au Cluster, vous pourrez y revenir plus tard.'
-                            : String(data.message || 'Enregistrement réussi.'),
-                        confirmButtonColor: '#005BBB'
-                    }).then(function () {
-                        if (targetStatus === 'Brouillon') {
-                            if (draftIdInput && Number(data.report_id || 0) > 0) {
-                                draftIdInput.value = String(Number(data.report_id));
-                            }
-                            return;
-                        }
-                        window.location.href = '?page=rapportage-liste-user';
-                    });
-                } else {
-                    if (targetStatus !== 'Brouillon') {
-                        window.location.href = '?page=rapportage-liste-user';
-                    }
-                }
-            })
-            .catch(function (err) {
-                if (window.Swal && window.Swal.fire) {
-                    window.Swal.fire({
-                        icon: 'error',
-                        title: 'Erreur',
-                        text: err.message || 'Erreur lors de la sauvegarde.'
-                    });
-                }
-            });
-    }
-
-    var btnDraft = document.getElementById('btn-save-draft');
-    var btnSubmit = document.getElementById('btn-submit-cluster');
-    if (btnDraft) {
-        btnDraft.addEventListener('click', function () {
-            submitWizard('Brouillon');
-        });
-    }
-    if (btnSaveDraftSticky) {
-        btnSaveDraftSticky.addEventListener('click', function () {
-            submitWizard('Brouillon');
-        });
-    }
-    if (btnSubmit) {
-        btnSubmit.addEventListener('click', function () {
-            submitWizard('Soumis');
-        });
+        try { window.sessionStorage.removeItem('sydra_ia_prefill'); } catch (e) {}
     }
 
     hydrateFormFromDraft(wizardDraftData);
-    if (!wizardDraftData) {
-        hydrateFormFromAiPrefill();
-    }
+    if (!wizardDraftData) { hydrateFromAiPrefill(); }
 })();
 </script>

@@ -61,46 +61,52 @@ $csrfTokenDashboard = htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8');
 <style>
 .dashboard-shell {
     display: grid;
-    gap: 1rem;
+    gap: 1.5rem;
+    font-family: 'Poppins', 'Inter', sans-serif;
 }
 
 .dashboard-hero {
-    border: 1px solid #d8e6f7;
-    border-radius: 18px;
-    padding: 1.1rem 1.2rem;
-    background:
-        radial-gradient(circle at 95% -15%, rgba(0, 91, 187, 0.16), transparent 45%),
-        linear-gradient(140deg, #ffffff 0%, #eef5ff 100%);
+    border: none;
+    border-radius: 20px;
+    padding: 2.2rem 2rem;
+    background: 
+        radial-gradient(circle at 95% -15%, rgba(99, 102, 241, 0.15), transparent 45%),
+        linear-gradient(135deg, #f8faff 0%, #e6f0ff 100%);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.03);
+}
+
+.dashboard-hero h1 {
+    font-weight: 800;
+    color: #0f172a;
+    font-size: 2.1rem;
 }
 
 .dashboard-kpi-card {
-    border: 1px solid #d9e6f6;
-    border-radius: 14px;
+    border: none;
+    border-radius: 16px;
     background: #ffffff;
-    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.04);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+    transition: transform 0.2s, box-shadow 0.2s;
 }
 
-.dashboard-kpi-icon {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
-    display: inline-grid;
-    place-items: center;
-    background: rgba(0, 91, 187, 0.1);
-    color: #005BBB;
+.dashboard-kpi-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.07);
 }
 
 .dashboard-tip-card {
-    border: 1px solid #d7e6f7;
-    border-radius: 14px;
-    background: linear-gradient(160deg, #ffffff 0%, #edf4ff 100%);
-    box-shadow: 0 10px 20px rgba(0, 91, 187, 0.07);
+    border: none;
+    border-radius: 16px;
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    box-shadow: 0 4px 20px rgba(245, 158, 11, 0.05);
+    padding: 1.5rem !important;
 }
 
 .dashboard-activity-card {
-    border: 1px solid #dde8f6;
-    border-radius: 14px;
+    border: none;
+    border-radius: 16px;
     background: #ffffff;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
 }
 
 .dashboard-activity-list {
@@ -108,27 +114,36 @@ $csrfTokenDashboard = htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8');
     margin: 0;
     padding: 0;
     display: grid;
-    gap: 0.65rem;
+    gap: 0.75rem;
 }
 
 .dashboard-activity-list li {
-    border: 1px solid #e5edf8;
-    border-radius: 10px;
-    padding: 0.7rem 0.75rem;
-    background: #fbfdff;
+    border: 1px solid #f1f5f9;
+    border-radius: 12px;
+    padding: 0.9rem 1rem;
+    background: #ffffff;
+    transition: all 0.25s ease;
+}
+
+.dashboard-activity-list li:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 22px rgba(0, 91, 187, 0.06);
+    border-color: #cbd5e1;
 }
 
 .dashboard-ops-card {
-    border: 1px solid #dbe8f5;
-    border-radius: 14px;
-    background: linear-gradient(170deg, #ffffff 0%, #f5f9ff 100%);
+    border: none;
+    border-radius: 16px;
+    background: #ffffff;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
 }
 
 .dashboard-map-shell {
-    height: 360px;
-    border-radius: 12px;
-    border: 1px solid #dbe8f5;
+    height: 380px;
+    border-radius: 14px;
+    border: 1px solid #cbd5e1;
     overflow: hidden;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
 }
 
 .dashboard-chart-shell {
@@ -148,13 +163,13 @@ $csrfTokenDashboard = htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8');
     background: rgba(248, 251, 255, 0.88);
     color: #475569;
     font-weight: 600;
-    border-radius: 12px;
+    border-radius: 14px;
 }
 
 #dashboard-operational-map .leaflet-popup-content-wrapper {
     border-radius: 16px;
     padding: 0;
-    box-shadow: 0 14px 28px rgba(15, 23, 42, 0.22);
+    box-shadow: 0 14px 28px rgba(15, 23, 42, 0.15);
     overflow: hidden;
 }
 #dashboard-operational-map .leaflet-popup-content { margin: 0; }
@@ -162,7 +177,7 @@ $csrfTokenDashboard = htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8');
 
 .dashboard-popup-card { min-width: 280px; max-width: 320px; background: #ffffff; }
 .dashboard-popup-head {
-    padding: 10px 12px;
+    padding: 12px 14px;
     border-bottom: 1px solid #e2e8f0;
     background: linear-gradient(130deg, #f8fbff 0%, #eef5ff 100%);
 }
@@ -174,8 +189,8 @@ $csrfTokenDashboard = htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8');
     align-items: center;
     gap: 4px;
     border-radius: 999px;
-    padding: 3px 8px;
-    font-size: 11px;
+    padding: 4px 10px;
+    font-size: 10px;
     font-weight: 700;
     line-height: 1;
 }
@@ -188,8 +203,8 @@ $csrfTokenDashboard = htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8');
 .dashboard-popup-badge.status-rejected { background: #fee2e2; color: #b91c1c; }
 .dashboard-popup-badge.status-submitted { background: #dbeafe; color: #1d4ed8; }
 .dashboard-popup-badge.status-draft { background: #e2e8f0; color: #334155; }
-.dashboard-popup-body { padding: 10px 12px 12px; font-size: 12px; color: #334155; }
-.dashboard-popup-meta-row { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 5px; }
+.dashboard-popup-body { padding: 12px 14px; font-size: 12px; color: #334155; }
+.dashboard-popup-meta-row { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
 .dashboard-popup-meta-label { color: #64748b; font-weight: 600; white-space: nowrap; }
 .dashboard-popup-meta-value { color: #0f172a; text-align: right; font-weight: 600; }
 .dashboard-popup-btn {
@@ -198,24 +213,22 @@ $csrfTokenDashboard = htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8');
     justify-content: center;
     gap: 6px;
     width: 100%;
-    margin-top: 8px;
-    border-radius: 10px;
+    margin-top: 10px;
+    border-radius: 12px;
     border: 1px solid #005BBB;
     background: #005BBB;
     color: #ffffff !important;
-    padding: 8px 10px;
+    padding: 10px 12px;
     font-size: 12px;
     font-weight: 700;
     text-decoration: none;
-    transition: transform .16s ease, box-shadow .16s ease, background .16s ease, border-color .16s ease;
+    transition: all 0.2s ease;
 }
-.dashboard-popup-btn:hover,
-.dashboard-popup-btn:focus,
-.dashboard-popup-btn:active {
+.dashboard-popup-btn:hover {
     background: #004ea3;
     border-color: #004ea3;
     color: #ffffff !important;
-    box-shadow: 0 10px 18px rgba(0, 91, 187, 0.28);
+    box-shadow: 0 6px 16px rgba(0, 91, 187, 0.2);
     transform: translateY(-1px);
     text-decoration: none;
 }
@@ -223,23 +236,23 @@ $csrfTokenDashboard = htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8');
 
 <div class="dashboard-shell">
     <section class="dashboard-hero">
-        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
             <div>
                 <h1 class="mb-1">Bienvenue sur SyDRA, <?= htmlspecialchars($displayName, ENT_QUOTES, 'UTF-8'); ?></h1>
-                <p class="text-muted mb-0"><?= htmlspecialchars($subtitle, ENT_QUOTES, 'UTF-8'); ?></p>
+                <p class="text-secondary mb-0"><?= htmlspecialchars($subtitle, ENT_QUOTES, 'UTF-8'); ?></p>
             </div>
             <div class="d-flex flex-wrap gap-2">
                 <a href="<?= htmlspecialchars($heroPrimaryHref, ENT_QUOTES, 'UTF-8'); ?>"
-                   class="btn btn-primary<?= !$isDecisionRole ? ' js-create-alert-link' : ''; ?>"
+                   class="btn btn-primary rounded-pill px-4 shadow-sm<?= !$isDecisionRole ? ' js-create-alert-link' : ''; ?>"
                    <?= !$isDecisionRole ? 'data-check-draft="1"' : ''; ?>>
-                    <i class="<?= htmlspecialchars($heroPrimaryIcon, ENT_QUOTES, 'UTF-8'); ?> me-1"></i><?= htmlspecialchars($heroPrimaryLabel, ENT_QUOTES, 'UTF-8'); ?>
+                    <i class="<?= htmlspecialchars($heroPrimaryIcon, ENT_QUOTES, 'UTF-8'); ?> me-2"></i><?= htmlspecialchars($heroPrimaryLabel, ENT_QUOTES, 'UTF-8'); ?>
                 </a>
-                <a href="<?= htmlspecialchars($heroSecondaryHref, ENT_QUOTES, 'UTF-8'); ?>" class="btn btn-outline-primary">
-                    <i class="<?= htmlspecialchars($heroSecondaryIcon, ENT_QUOTES, 'UTF-8'); ?> me-1"></i><?= htmlspecialchars($heroSecondaryLabel, ENT_QUOTES, 'UTF-8'); ?>
+                <a href="<?= htmlspecialchars($heroSecondaryHref, ENT_QUOTES, 'UTF-8'); ?>" class="btn btn-outline-primary rounded-pill px-4 shadow-sm">
+                    <i class="<?= htmlspecialchars($heroSecondaryIcon, ENT_QUOTES, 'UTF-8'); ?> me-2"></i><?= htmlspecialchars($heroSecondaryLabel, ENT_QUOTES, 'UTF-8'); ?>
                 </a>
                 <?php if ($isDecisionRole): ?>
-                <a href="<?= htmlspecialchars($heroTertiaryHref, ENT_QUOTES, 'UTF-8'); ?>" class="btn btn-outline-secondary">
-                    <i class="<?= htmlspecialchars($heroTertiaryIcon, ENT_QUOTES, 'UTF-8'); ?> me-1"></i><?= htmlspecialchars($heroTertiaryLabel, ENT_QUOTES, 'UTF-8'); ?>
+                <a href="<?= htmlspecialchars($heroTertiaryHref, ENT_QUOTES, 'UTF-8'); ?>" class="btn btn-outline-secondary rounded-pill px-4 shadow-sm">
+                    <i class="<?= htmlspecialchars($heroTertiaryIcon, ENT_QUOTES, 'UTF-8'); ?> me-2"></i><?= htmlspecialchars($heroTertiaryLabel, ENT_QUOTES, 'UTF-8'); ?>
                 </a>
                 <?php endif; ?>
             </div>
@@ -247,14 +260,26 @@ $csrfTokenDashboard = htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8');
     </section>
 
     <section class="row g-3">
-        <?php foreach (($dashboardKpis ?? []) as $kpi): ?>
+        <?php 
+        foreach (($dashboardKpis ?? []) as $index => $kpi): 
+            // Mappage de couleur par KPI
+            $kpiColors = [
+                0 => ['bg' => '#f1f5f9', 'text' => '#475569'], // Dossier / Calendrier
+                1 => ['bg' => '#fef3c7', 'text' => '#d97706'], // En attente (Warning)
+                2 => ['bg' => '#d1fae5', 'text' => '#059669'], // Validés (Success)
+                3 => ['bg' => '#f3e8ff', 'text' => '#7e22ce'], // IA (Purple)
+            ];
+            $color = $kpiColors[$index] ?? ['bg' => '#f1f5f9', 'text' => '#475569'];
+        ?>
             <div class="col-12 col-md-6 col-xl-3">
-                <div class="dashboard-kpi-card h-100 p-3">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <span class="dashboard-kpi-icon"><i class="fa-solid <?= htmlspecialchars((string) ($kpi['icon'] ?? 'fa-chart-simple'), ENT_QUOTES, 'UTF-8'); ?>"></i></span>
-                        <strong class="h4 mb-0"><?= (int) ($kpi['value'] ?? 0); ?></strong>
+                <div class="dashboard-kpi-card h-100 p-4 border-0">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <span class="rounded-circle d-flex align-items-center justify-content-center" style="width: 48px; height: 48px; background-color: <?= $color['bg']; ?>; color: <?= $color['text']; ?>;">
+                            <i class="fa-solid <?= htmlspecialchars((string) ($kpi['icon'] ?? 'fa-chart-simple'), ENT_QUOTES, 'UTF-8'); ?> fs-5"></i>
+                        </span>
+                        <strong class="fs-2 fw-bold text-dark mb-0" style="font-family: 'Inter', sans-serif;"><?= htmlspecialchars((string) ($kpi['value'] ?? 0), ENT_QUOTES, 'UTF-8'); ?></strong>
                     </div>
-                    <p class="mb-0 text-muted small"><?= htmlspecialchars((string) ($kpi['label'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></p>
+                    <p class="mb-0 text-secondary fw-semibold text-uppercase" style="letter-spacing: 0.5px; font-size: 0.75rem;"><?= htmlspecialchars((string) ($kpi['label'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></p>
                 </div>
             </div>
         <?php endforeach; ?>
@@ -262,12 +287,12 @@ $csrfTokenDashboard = htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8');
 
     <section class="row g-3">
         <div class="col-lg-5">
-            <div class="dashboard-tip-card p-3 mb-3">
-                <h2 class="h5 mb-2"><i class="fa-solid fa-lightbulb me-1 text-warning"></i>Conseil du jour</h2>
-                <p class="mb-0"><?= htmlspecialchars($tipOfDay, ENT_QUOTES, 'UTF-8'); ?></p>
+            <div class="dashboard-tip-card p-4 mb-3 border-0">
+                <h2 class="h5 mb-2 fw-bold text-warning-emphasis"><i class="fa-solid fa-lightbulb me-2"></i>Conseil du jour</h2>
+                <p class="mb-0 text-dark-emphasis small" style="line-height: 1.5; font-weight: 500;"><?= htmlspecialchars($tipOfDay, ENT_QUOTES, 'UTF-8'); ?></p>
             </div>
-            <div class="dashboard-activity-card p-3">
-                <h2 class="h5 mb-2">Impact territorial</h2>
+            <div class="dashboard-activity-card p-4 border-0">
+                <h2 class="h5 mb-3 fw-bold text-dark"><i class="fa-solid fa-map-location-dot me-2 text-primary"></i>Impact territorial</h2>
                 <div class="dashboard-territory-shell">
                     <canvas id="dashboard-territory-impact-chart"></canvas>
                 </div>
@@ -275,14 +300,17 @@ $csrfTokenDashboard = htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8');
         </div>
 
         <div class="col-lg-7">
-            <div class="dashboard-activity-card h-100 p-3">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <h2 class="h5 mb-0">Activités récentes</h2>
-                    <span class="badge text-bg-light border">5 derniers rapports</span>
+            <div class="dashboard-activity-card h-100 p-4 border-0">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h2 class="h5 mb-0 fw-bold text-dark"><i class="fa-solid fa-clock-rotate-left me-2 text-primary"></i>Activités récentes</h2>
+                    <span class="badge rounded-pill bg-light text-secondary border px-3 py-2" style="font-size: 0.75rem;">5 derniers rapports</span>
                 </div>
 
                 <?php if (($dashboardRecentReports ?? []) === []): ?>
-                    <p class="text-muted mb-0">Aucune activité récente disponible.</p>
+                    <div class="text-center py-5 text-muted">
+                        <i class="fa-solid fa-folder-open fs-2 mb-2"></i>
+                        <p class="mb-0 small">Aucune activité récente disponible.</p>
+                    </div>
                 <?php else: ?>
                     <ul class="dashboard-activity-list">
                         <?php foreach ($dashboardRecentReports as $report): ?>
@@ -307,26 +335,39 @@ $csrfTokenDashboard = htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8');
                                    class="text-decoration-none text-reset d-block js-guard-report-access"
                                    data-can-view-details="<?= $canViewDetails ? '1' : '0'; ?>"
                                    <?= $onclick !== '' ? ('onclick="' . htmlspecialchars($onclick, ENT_QUOTES, 'UTF-8') . '"') : ''; ?>>
-                                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-1">
-                                        <strong>#<?= $reportId; ?> • <?= htmlspecialchars((string) ($report['report_type'] ?? 'FLASH'), ENT_QUOTES, 'UTF-8'); ?></strong>
-                                        <small class="text-muted"><?= htmlspecialchars((string) ($report['created_at'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></small>
+                                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-1 mb-1">
+                                        <strong class="text-dark">#<?= $reportId; ?> • <?= htmlspecialchars((string) ($report['report_type'] ?? 'FLASH'), ENT_QUOTES, 'UTF-8'); ?></strong>
+                                        <small class="text-muted small"><?= htmlspecialchars((string) ($report['created_at'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></small>
                                     </div>
-                                    <div class="small text-muted">
-                                        <?= htmlspecialchars((string) ($report['organization_name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>
-                                        • <?= htmlspecialchars((string) ($report['location_text'] ?? 'Non précisée'), ENT_QUOTES, 'UTF-8'); ?>
-                                        •
+                                    <div class="small text-secondary d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                        <span>
+                                            <i class="fa-solid fa-building me-1" style="font-size: 0.8rem;"></i> <?= htmlspecialchars((string) ($report['organization_name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>
+                                            • <i class="fa-solid fa-location-dot me-1" style="font-size: 0.8rem;"></i> <?= htmlspecialchars((string) ($report['location_text'] ?? 'Non précisée'), ENT_QUOTES, 'UTF-8'); ?>
+                                        </span>
                                         <?php if ($isDraft): ?>
-                                            <span class="badge text-bg-secondary">Brouillon</span>
+                                            <span class="badge rounded-pill" style="background-color: #f1f5f9; color: #64748b; font-weight: 600; padding: 4px 8px;">Brouillon</span>
                                         <?php else: ?>
-                                            <?= htmlspecialchars($status, ENT_QUOTES, 'UTF-8'); ?>
+                                            <?php 
+                                            // Badges de statut
+                                            $stName = strtolower(str_replace(['é', 'è', 'ê'], 'e', trim($status)));
+                                            $badgeStyle = "background-color: #f1f5f9; color: #64748b;";
+                                            if ($stName === 'soumis' || $stName === 'submitted' || $stName === 'en revision') {
+                                                $badgeStyle = "background-color: #fef3c7; color: #d97706;";
+                                            } elseif ($stName === 'valide' || $stName === 'approuve' || $stName === 'publie') {
+                                                $badgeStyle = "background-color: #d1fae5; color: #059669;";
+                                            } elseif ($stName === 'rejete' || $stName === 'rejected') {
+                                                $badgeStyle = "background-color: #fee2e2; color: #dc2626;";
+                                            }
+                                            ?>
+                                            <span class="badge rounded-pill" style="<?= $badgeStyle; ?> font-weight: 600; padding: 4px 8px;"><?= htmlspecialchars($status, ENT_QUOTES, 'UTF-8'); ?></span>
                                         <?php endif; ?>
                                     </div>
                                 </a>
                                 <?php if ($isDraft && $isOwner): ?>
                                     <div class="mt-2">
                                         <a href="?page=rapportage-creer-wizar&id_brouillon=<?= $reportId; ?>"
-                                           class="btn btn-sm btn-outline-secondary"
-                                           onclick="return confirmDraftResume(event);">Continuer la saisie</a>
+                                           class="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1 small"
+                                           onclick="return confirmDraftResume(event);"><i class="fa-solid fa-play me-1"></i> Continuer la saisie</a>
                                     </div>
                                 <?php endif; ?>
                             </li>
@@ -337,10 +378,10 @@ $csrfTokenDashboard = htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8');
         </div>
     </section>
 
-    <section class="dashboard-ops-card p-3">
-        <div class="d-flex justify-content-between align-items-center mb-2">
-            <h2 class="h5 mb-0">Aperçu Opérationnel</h2>
-            <span class="badge text-bg-light border"><?= count($dashboardMapAlerts ?? []); ?> incident(s)</span>
+    <section class="dashboard-ops-card p-4 border-0">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2 class="h5 mb-0 fw-bold text-dark"><i class="fa-solid fa-map-location-dot me-2 text-primary"></i>Aperçu Opérationnel</h2>
+            <span class="badge rounded-pill bg-light text-secondary border px-3 py-2" style="font-size: 0.75rem;"><?= count($dashboardMapAlerts ?? []); ?> incident(s) géolocalisé(s)</span>
         </div>
         <div class="row g-3">
             <div class="col-xl-8">
@@ -352,8 +393,8 @@ $csrfTokenDashboard = htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8');
                 </div>
             </div>
             <div class="col-xl-4">
-                <div class="dashboard-activity-card h-100 p-3">
-                    <h3 class="h6 mb-2">Répartition des incidents</h3>
+                <div class="dashboard-activity-card h-100 p-4 border-0 shadow-none bg-light" style="border-radius: 14px;">
+                    <h3 class="h6 mb-3 fw-bold text-dark"><i class="fa-solid fa-chart-pie me-2 text-primary"></i>Gravité des incidents</h3>
                     <div class="dashboard-chart-shell">
                         <canvas id="dashboard-severity-chart"></canvas>
                     </div>

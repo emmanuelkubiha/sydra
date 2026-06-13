@@ -2738,13 +2738,16 @@ if ($page === 'rapportage-creer-wizar' && is_array($authUser)) {
                                             COALESCE(r.urgency_level, "Moyenne") AS urgency_level,
                                             COALESCE(r.victims_count, 0) AS victims_count,
                                             COALESCE(r.displaced_households, 0) AS displaced_households,
-                                            COALESCE(r.content, "") AS description,
-                                            COALESCE(r.analysis_text, "") AS analyse,
-                                            COALESCE(r.priority_needs_text, "") AS priority_needs,
-                                            COALESCE(r.recommendations_text, "") AS recommandations
+                                            COALESCE(r.facts_text, "") AS facts_text,
+                                            COALESCE(r.analysis_text, "") AS analysis_text,
+                                            COALESCE(r.recommendations_text, "") AS recommendations_text,
+                                            COALESCE(r.context_text, "") AS context_text,
+                                            COALESCE(r.impacts_text, "") AS impacts_text,
+                                            COALESCE(r.needs_text, "") AS needs_text,
+                                            COALESCE(r.priority_needs_text, "") AS priority_needs_text
                                      FROM reports r
                                      WHERE r.id = :id
-                                       AND r.' . $reportUserFkForWizard . ' = :user_id
+                                       AND r.reporter_user_id = :user_id
                                        AND ' . $statusNormExprForWizard . ' = "brouillon"
                                      LIMIT 1');
         $wizardStmt->execute([
@@ -2856,6 +2859,9 @@ if ($page === 'rapportage' || $page === 'rapportage-liste-user' || $page === 'ra
     $analysisExpr = $hasAnalysis ? 'r.analysis_text' : 'NULL';
     $notesExpr = $hasAdditionalNotes ? 'r.additional_notes' : 'NULL';
 
+    $hasIsAiGenerated = has_table_column($config, 'reports', 'is_ai_generated');
+    $isAiExpr = $hasIsAiGenerated ? 'r.is_ai_generated' : '0';
+
     $joinUserSql = $reportUserFk !== null
         ? 'LEFT JOIN users u ON u.id = r.' . $reportUserFk
         : '';
@@ -2930,8 +2936,9 @@ if ($page === 'rapportage' || $page === 'rapportage-liste-user' || $page === 'ra
                           ' . $gpsLatExpr . ' AS gps_lat,
                           ' . $gpsLngExpr . ' AS gps_lng,
                           ' . $orgExpr . ' AS organization_name,
-                     ' . $userExpr . ' AS owner_user_id,
+                          ' . $userExpr . ' AS owner_user_id,
                           ' . $statusExpr . ' AS workflow_status,
+                          ' . $isAiExpr . ' AS is_ai_generated,
                           r.created_at
                    FROM reports r
                    ' . $joinUserSql
@@ -3029,7 +3036,8 @@ if ($page === 'rapportage' || $page === 'rapportage-liste-user' || $page === 'ra
                                               ' . $statusExpr . ' AS workflow_status,
                                               ' . $urgencyExpr . ' AS urgency_level,
                                               ' . $ownerExprList . ' AS owner_user_id,
-                                              ' . $orgExprList . ' AS organization_name
+                                              ' . $orgExprList . ' AS organization_name,
+                                              ' . $isAiExpr . ' AS is_ai_generated
                                        FROM reports r
                                        ' . $joinUserSqlList . '
                                        WHERE ' . $statusNormalizedExpr . ' <> "brouillon"
@@ -3046,7 +3054,8 @@ if ($page === 'rapportage' || $page === 'rapportage-liste-user' || $page === 'ra
                                               ' . $statusExpr . ' AS workflow_status,
                                               ' . $urgencyExpr . ' AS urgency_level,
                                               ' . $ownerExprList . ' AS owner_user_id,
-                                              ' . $orgExprList . ' AS organization_name
+                                              ' . $orgExprList . ' AS organization_name,
+                                              ' . $isAiExpr . ' AS is_ai_generated
                                        FROM reports r
                                        ' . $joinUserSqlList . '
                                        WHERE r.' . $reportUserFk . ' = :user_id
@@ -3065,7 +3074,8 @@ if ($page === 'rapportage' || $page === 'rapportage-liste-user' || $page === 'ra
                                            ' . $incidentExpr . ' AS incident_label,
                                            ' . $statusExpr . ' AS workflow_status,
                                            ' . $urgencyExpr . ' AS urgency_level,
-                                           ' . $orgExpr . ' AS organization_name
+                                           ' . $orgExpr . ' AS organization_name,
+                                           ' . $isAiExpr . ' AS is_ai_generated
                                     FROM reports r
                                     ' . $joinUserSql . '
                                     WHERE ' . $statusNormalizedExpr . ' <> "brouillon"
@@ -3681,11 +3691,20 @@ if ($page === 'tableau_de_bord' && is_array($authUser)) {
             $activeOrgCount = (int) $orgCountStmt->fetchColumn();
         }
 
+        $aiPct = 0;
+        if (has_table_column($config, 'reports', 'is_ai_generated')) {
+            $aiStmt = $pdo->query('SELECT COUNT(*) AS tot, SUM(CASE WHEN is_ai_generated = 1 THEN 1 ELSE 0 END) AS ai_tot FROM reports');
+            $aiData = $aiStmt->fetch() ?: ['tot' => 0, 'ai_tot' => 0];
+            if ($aiData['tot'] > 0) {
+                $aiPct = round(($aiData['ai_tot'] / $aiData['tot']) * 100);
+            }
+        }
+
         $dashboardKpis = [
             ['label' => 'Rapports ce mois', 'value' => (int) ($global['month_reports'] ?? 0), 'icon' => 'fa-calendar-days'],
             ['label' => 'En attente validation', 'value' => (int) ($global['pending_reports'] ?? 0), 'icon' => 'fa-hourglass-half'],
             ['label' => 'Validés / publiés', 'value' => (int) ($global['approved_reports'] ?? 0), 'icon' => 'fa-badge-check'],
-            ['label' => 'Organisations actives', 'value' => $activeOrgCount, 'icon' => 'fa-building'],
+            ['label' => 'Générés par IA', 'value' => $aiPct . '%', 'icon' => 'fa-wand-magic-sparkles'],
         ];
     } else {
         if ($reportUserFk !== null) {
@@ -3699,11 +3718,21 @@ if ($page === 'tableau_de_bord' && is_array($authUser)) {
             $orgStmt->execute(['user_id' => (int) ($authUser['id'] ?? 0)]);
             $orgStats = $orgStmt->fetch() ?: [];
 
+            $aiPct = 0;
+            if (has_table_column($config, 'reports', 'is_ai_generated')) {
+                $aiStmt = $pdo->prepare('SELECT COUNT(*) AS tot, SUM(CASE WHEN is_ai_generated = 1 THEN 1 ELSE 0 END) AS ai_tot FROM reports WHERE ' . $reportUserFk . ' = :user_id');
+                $aiStmt->execute(['user_id' => (int) ($authUser['id'] ?? 0)]);
+                $aiData = $aiStmt->fetch() ?: ['tot' => 0, 'ai_tot' => 0];
+                if ($aiData['tot'] > 0) {
+                    $aiPct = round(($aiData['ai_tot'] / $aiData['tot']) * 100);
+                }
+            }
+
             $dashboardKpis = [
                 ['label' => 'Vos alertes ce mois', 'value' => (int) ($orgStats['month_reports'] ?? 0), 'icon' => 'fa-calendar-days'],
                 ['label' => 'En attente validation', 'value' => (int) ($orgStats['pending_reports'] ?? 0), 'icon' => 'fa-hourglass-half'],
                 ['label' => 'Validées / publiées', 'value' => (int) ($orgStats['approved_reports'] ?? 0), 'icon' => 'fa-badge-check'],
-                ['label' => 'Brouillons en cours', 'value' => (int) ($orgStats['draft_reports'] ?? 0), 'icon' => 'fa-pen-to-square'],
+                ['label' => 'Générés par IA', 'value' => $aiPct . '%', 'icon' => 'fa-wand-magic-sparkles'],
             ];
         }
     }

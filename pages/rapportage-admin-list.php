@@ -2,6 +2,27 @@
 /** @var array<int, array<string, mixed>> $rapportageAdminReports */
 /** @var int|null $rapportageLatestSubmitted */
 
+$adminRoles = ['ADMIN', 'GTMP_LEAD', 'GTMP_COLEAD', 'CLUSTER_LEADER', 'CLUSTER_PROTECTION'];
+if (!isset($_SESSION['role_code']) || !in_array($_SESSION['role_code'], $adminRoles)) {
+?>
+    <div class="d-flex align-items-center justify-content-center min-vh-100" style="background-color: #f8f9fa;">
+        <div class="text-center p-5 bg-white" style="border-radius: 16px; box-shadow: 0 15px 40px rgba(0,0,0,0.08); max-width: 450px;">
+            <div class="mb-4">
+                <i class="fa-solid fa-shield-halved text-primary" style="font-size: 4rem; opacity: 0.8;"></i>
+            </div>
+            <h3 style="font-family: 'Inter', 'Poppins', sans-serif; font-weight: 600; color: #1f2937;">Accès Restreint</h3>
+            <p class="text-muted mt-3 mb-4" style="font-size: 0.95rem;">
+                Désolé, cette section est réservée à l'équipe de coordination du GTMP. Si vous pensez qu'il s'agit d'une erreur, veuillez contacter votre administrateur.
+            </p>
+            <a href="?page=dashboard" class="btn btn-primary rounded-pill px-4 py-2" style="font-weight: 500;">
+                <i class="fa-solid fa-arrow-left me-2"></i> Retour à l'accueil
+            </a>
+        </div>
+    </div>
+<?php
+    exit;
+}
+
 $statusClass = static function (string $status): string {
     $normalized = strtolower(trim($status));
     $normalized = str_replace(['é', 'è', 'ê'], 'e', $normalized);
@@ -176,7 +197,14 @@ $statusClass = static function (string $status): string {
                 data-date="<?= htmlspecialchars(substr($createdAt, 0, 10), ENT_QUOTES, 'UTF-8'); ?>"
                 data-search="<?= htmlspecialchars($searchBlob, ENT_QUOTES, 'UTF-8'); ?>">
                 <td><?= htmlspecialchars($createdAt, ENT_QUOTES, 'UTF-8'); ?></td>
-                <td><?= htmlspecialchars($type, ENT_QUOTES, 'UTF-8'); ?></td>
+                <td>
+                    <?= htmlspecialchars($type, ENT_QUOTES, 'UTF-8'); ?>
+                    <?php if (isset($report['is_ai_generated']) && $report['is_ai_generated'] == 1): ?>
+                        <span class="badge rounded-pill ms-2" style="background-color: #f3e8ff; color: #7e22ce; border: 1px solid #d8b4fe; font-size: 0.75rem;">
+                            <i class="fa-solid fa-wand-magic-sparkles me-1"></i> IA
+                        </span>
+                    <?php endif; ?>
+                </td>
                 <td><?= htmlspecialchars($organization, ENT_QUOTES, 'UTF-8'); ?></td>
                 <td><?= htmlspecialchars($location, ENT_QUOTES, 'UTF-8'); ?></td>
                 <td><?= htmlspecialchars($incident, ENT_QUOTES, 'UTF-8'); ?></td>

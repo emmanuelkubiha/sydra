@@ -18,16 +18,18 @@ if (typeof toastr !== 'undefined') {
     };
 }
 
-// 2. Mixin SweetAlert2 pour les Modales de confirmation / Erreurs bloquantes
+// 2. Mixin SweetAlert2 — Design SaaS Premium (Notion/Asana)
+// Usage : window.premiumAlert.fire({ icon, title, text }) partout dans SyDRA
+// à la place de Swal.fire() pour garantir le design cohérent.
 window.premiumAlert = (typeof Swal !== 'undefined') ? Swal.mixin({
     customClass: {
-        popup: 'sydra-swal-popup',
-        title: 'sydra-swal-title',
+        popup:         'sydra-swal-popup',
+        title:         'sydra-swal-title',
         htmlContainer: 'sydra-swal-text',
-        confirmButton: 'btn btn-primary rounded-pill px-4 mx-2',
-        cancelButton: 'btn btn-outline-secondary rounded-pill px-4 mx-2'
+        confirmButton: 'btn btn-primary mx-2',
+        cancelButton:  'btn btn-outline-secondary mx-2'
     },
-    buttonsStyling: false, // On désactive le style moche par défaut pour utiliser Bootstrap
+    buttonsStyling: false, // Désactive les gros boutons colorés natifs de SweetAlert2
     showClass: {
         popup: 'animate__animated animate__fadeInUp animate__faster'
     },

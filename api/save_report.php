@@ -98,10 +98,12 @@ try {
     $victimsCount = max(0, (int) ($_POST['victims_count'] ?? 0));
     $displacedHouseholds = max(0, (int) ($_POST['displaced_households'] ?? 0));
 
-    $description = appliquerCodification(trim((string) ($_POST['description'] ?? '')));
-    $analyse = appliquerCodification(trim((string) ($_POST['analyse'] ?? '')));
-    $priorityNeeds = trim((string) ($_POST['priority_needs'] ?? ''));
-    $recommandations = appliquerCodification(trim((string) ($_POST['recommandations'] ?? '')));
+    // Colonnes correctes : facts_text, analysis_text, recommendations_text
+    // On accepte aussi les anciens noms (description/analyse) pour compatibilité IA prefill
+    $factsText       = appliquerCodification(trim((string) ($_POST['facts_text']          ?? $_POST['description'] ?? '')));
+    $analyse         = appliquerCodification(trim((string) ($_POST['analysis_text']       ?? $_POST['analyse']     ?? '')));
+    $priorityNeeds   = trim((string) ($_POST['priority_needs'] ?? ''));
+    $recommandations = appliquerCodification(trim((string) ($_POST['recommendations_text'] ?? $_POST['recommandations'] ?? '')));
 
     $gpsLatRaw = trim((string) ($_POST['gps_lat'] ?? ''));
     $gpsLngRaw = trim((string) ($_POST['gps_lng'] ?? ''));
@@ -112,12 +114,12 @@ try {
     $status = strtolower($statusInput) === 'soumis' ? 'Soumis' : 'Brouillon';
 
     if ($status === 'Soumis') {
-        if ($province === '' || $territory === '' || $healthZone === '' || $groupement === '' || $village === '') {
-            echo json_encode(['ok' => false, 'message' => 'Veuillez renseigner toute la localisation obligatoire.']);
+        if ($province === '' || $village === '') {
+            echo json_encode(['ok' => false, 'message' => 'Veuillez renseigner au minimum la Province et le Village.']);
             exit;
         }
 
-        if ($incidentType === '' || $description === '' || $analyse === '' || $priorityNeeds === '' || $recommandations === '') {
+        if ($incidentType === '' || $factsText === '' || $analyse === '' || $recommandations === '') {
             echo json_encode(['ok' => false, 'message' => 'Veuillez compléter les sections Faits et Analyse.']);
             exit;
         }
@@ -128,36 +130,80 @@ try {
     }
 
     $userId = (int) $_SESSION['auth_user_id'];
+    // organization_id : récupéré depuis la session (stocké au login)
+    $orgId = (int) ($_SESSION['organization_id'] ?? $_SESSION['org_id'] ?? 0);
+
+    // Si pas en session, on le récupère depuis la table users
+    if ($orgId <= 0) {
+        $orgStmt = $pdo->prepare('SELECT organization_id FROM users WHERE id = :id LIMIT 1');
+        $orgStmt->execute(['id' => $userId]);
+        $orgRow = $orgStmt->fetch(PDO::FETCH_ASSOC);
+        $orgId = (int) ($orgRow['organization_id'] ?? 0);
+    }
+
+    // status_id : résoudre DRAFT=1 / SUBMITTED=2 depuis report_statuses
+    $statusCode  = $status === 'Soumis' ? 'SUBMITTED' : 'DRAFT';
+    $statusIdStmt = $pdo->prepare('SELECT id FROM report_statuses WHERE code = :code LIMIT 1');
+    $statusIdStmt->execute(['code' => $statusCode]);
+    $statusId = (int) ($statusIdStmt->fetchColumn() ?: 1); // fallback : 1 = DRAFT
+
     $requestedDraftId = (int) ($_POST['draft_id'] ?? $_POST['id_brouillon'] ?? $_POST['report_id'] ?? 0);
     $titleIncident = $incidentType !== '' ? $incidentType : 'Incident en cours';
     $titleVillage = $village !== '' ? $village : 'localisation a completer';
     $title = 'Incident - ' . $titleIncident . ' - ' . $titleVillage;
     $locationText = trim($province . ' / ' . $territory . ' / ' . $village, ' /');
 
+    // Génération du reference_code unique (format : SY-YYYYMMDD-XXXX)
+    // On s'assure de l'unicité en ajoutant un suffixe aléatoire hexadécimal
+    do {
+        $refCode = 'SY-' . date('Ymd') . '-' . strtoupper(bin2hex(random_bytes(2)));
+        $refCheckStmt = $pdo->prepare('SELECT COUNT(*) FROM reports WHERE reference_code = :ref');
+        $refCheckStmt->execute(['ref' => $refCode]);
+        $refExists = (int) $refCheckStmt->fetchColumn() > 0;
+    } while ($refExists);
+
     $dataMap = [
-        'user_id' => $userId,
-        'title' => $title,
-        'report_type' => 'FLASH',
-        'content' => $description,
-        'location_text' => $locationText,
-        'urgency_level' => $urgencyLevel,
-        'workflow_status' => $status,
-        'incident_label' => $incidentType,
-        'province' => $province,
-        'territory' => $territory,
-        'health_zone' => $healthZone,
-        'groupement' => $groupement,
-        'village' => $village,
-        'incident_type' => $incidentType,
-        'gps_lat' => $gpsLat,
-        'gps_lng' => $gpsLng,
-        'victims_count' => $victimsCount,
+        // Colonnes NOT NULL obligatoires
+        'reporter_user_id' => $userId,
+        'organization_id'  => $orgId,
+        'status_id'        => $statusId,
+        // Fallback si ancienne colonne user_id existe encore
+        'user_id'          => $userId,
+        'title'            => $title,
+        'report_type'      => 'FLASH',
+        // Référence unique (générée uniquement pour les nouveaux rapports)
+        'reference_code'   => $refCode,
+        // Colonnes texte correctes (facts_text, analysis_text, recommendations_text)
+        'facts_text'            => $factsText,
+        'analysis_text'         => $analyse,
+        'priority_needs_text'   => $priorityNeeds,
+        'recommendations_text'  => $recommandations,
+        // Champs legacy pour compatibilité ancienne structure
+        'content'               => $factsText,
+        'additional_notes'      => 'Besoins prioritaires:' . PHP_EOL . $priorityNeeds,
+        // Localisation
+        'location_text'    => $locationText,
+        'province'         => $province,
+        'territory'        => $territory,
+        'health_zone'      => $healthZone,
+        'groupement'       => $groupement,
+        'village'          => $village,
+        // Incident
+        'urgency_level'    => $urgencyLevel,
+        'workflow_status'  => $status,
+        'incident_label'   => $incidentType,
+        'incident_type'    => $incidentType,
+        // GPS
+        'gps_lat'          => $gpsLat,
+        'gps_lng'          => $gpsLng,
+        // Bilan
+        'victims_count'       => $victimsCount,
         'displaced_households' => $displacedHouseholds,
-        'analysis_text' => $analyse,
-        'priority_needs_text' => $priorityNeeds,
-        'recommendations_text' => $recommandations,
-        'additional_notes' => "Besoins prioritaires:\n" . $priorityNeeds,
     ];
+
+    if (isset($_POST['is_ai_generated'])) {
+        $dataMap['is_ai_generated'] = (int) $_POST['is_ai_generated'];
+    }
 
     if ($status === 'Soumis') {
         $dataMap['submitted_at'] = date('Y-m-d H:i:s');
@@ -181,17 +227,19 @@ try {
     $statusExpr = 'LOWER(REPLACE(REPLACE(REPLACE(COALESCE(NULLIF(TRIM(workflow_status), ""), "brouillon"), "é", "e"), "è", "e"), "ê", "e"))';
     $existingDraftId = 0;
 
+    // Recherche du brouillon existant — on utilise reporter_user_id (vrai nom)
+    // avec fallback sur user_id si l'ancienne colonne existe encore
+    $userColExists = columnExists($pdo, 'reports', 'reporter_user_id') ? 'reporter_user_id' : 'user_id';
+
     if ($requestedDraftId > 0) {
-        $targetStmt = $pdo->prepare('SELECT id
-                                     FROM reports
-                                     WHERE id = :id
-                                       AND user_id = :user_id
-                                                                             AND ' . $statusExpr . ' = "brouillon"
-                                     LIMIT 1');
-        $targetStmt->execute([
-            'id' => $requestedDraftId,
-            'user_id' => $userId,
-        ]);
+        $targetStmt = $pdo->prepare(
+            'SELECT id FROM reports
+             WHERE id = :id
+               AND ' . $userColExists . ' = :user_id
+               AND ' . $statusExpr . ' = "brouillon"
+             LIMIT 1'
+        );
+        $targetStmt->execute(['id' => $requestedDraftId, 'user_id' => $userId]);
         $target = $targetStmt->fetch();
         if (is_array($target)) {
             $existingDraftId = (int) ($target['id'] ?? 0);
@@ -199,12 +247,13 @@ try {
     }
 
     if ($existingDraftId <= 0) {
-        $draftStmt = $pdo->prepare('SELECT id
-                                    FROM reports
-                                    WHERE user_id = :user_id
-                                      AND ' . $statusExpr . ' = "brouillon"
-                                    ORDER BY created_at DESC
-                                    LIMIT 1');
+        $draftStmt = $pdo->prepare(
+            'SELECT id FROM reports
+             WHERE ' . $userColExists . ' = :user_id
+               AND ' . $statusExpr . ' = "brouillon"
+             ORDER BY created_at DESC
+             LIMIT 1'
+        );
         $draftStmt->execute(['user_id' => $userId]);
         $draft = $draftStmt->fetch();
         if (is_array($draft)) {
@@ -218,7 +267,8 @@ try {
     if ($existingDraftId > 0) {
         $setParts = [];
         foreach ($columns as $col) {
-            if ($col === 'user_id') {
+            // Ne pas écraser la FK utilisateur ni le code de référence lors d'un UPDATE
+            if ($col === 'user_id' || $col === 'reporter_user_id' || $col === 'reference_code') {
                 continue;
             }
             $setParts[] = $col . ' = :' . $col;
@@ -232,13 +282,17 @@ try {
         $params['id'] = $existingDraftId;
         $updateSql = 'UPDATE reports SET ' . implode(', ', $setParts) . ' WHERE id = :id LIMIT 1';
         $stmt = $pdo->prepare($updateSql);
-        foreach ($params as $key => $value) {
+
+        // Ne binder que les colonnes effectivement dans le SET + :id
+        $usedInUpdate = array_merge(
+            array_map(fn (string $part): string => explode(' ', $part)[0], $setParts),
+            ['id']
+        );
+        foreach ($usedInUpdate as $key) {
+            $value = $params[$key] ?? null;
             $paramType = PDO::PARAM_STR;
-            if (is_int($value)) {
-                $paramType = PDO::PARAM_INT;
-            } elseif ($value === null) {
-                $paramType = PDO::PARAM_NULL;
-            }
+            if (is_int($value))   { $paramType = PDO::PARAM_INT; }
+            elseif ($value === null) { $paramType = PDO::PARAM_NULL; }
             $stmt->bindValue(':' . $key, $value, $paramType);
         }
         $stmt->execute();
@@ -249,14 +303,13 @@ try {
         $placeholders = array_map(static fn (string $col): string => ':' . $col, $columns);
         $insertSql = 'INSERT INTO reports (' . implode(', ', $columns) . ') VALUES (' . implode(', ', $placeholders) . ')';
         $stmt = $pdo->prepare($insertSql);
-        foreach ($params as $key => $value) {
+        // Ne binder que les colonnes effectivement dans l'INSERT
+        foreach ($columns as $col) {
+            $value = $params[$col] ?? null;
             $paramType = PDO::PARAM_STR;
-            if (is_int($value)) {
-                $paramType = PDO::PARAM_INT;
-            } elseif ($value === null) {
-                $paramType = PDO::PARAM_NULL;
-            }
-            $stmt->bindValue(':' . $key, $value, $paramType);
+            if (is_int($value))    { $paramType = PDO::PARAM_INT; }
+            elseif ($value === null) { $paramType = PDO::PARAM_NULL; }
+            $stmt->bindValue(':' . $col, $value, $paramType);
         }
         $stmt->execute();
         $reportId = (int) $pdo->lastInsertId();

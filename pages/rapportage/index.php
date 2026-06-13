@@ -65,128 +65,384 @@ if ($selectedOrgId !== '' && ctype_digit($selectedOrgId) === false) {
 }
 ?>
 
-<div class="card shadow-sm rounded-4 report-hub-hero border-0">
-    <div class="report-hub-bg"></div>
-    <div class="report-hub-content">
-        <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
-            <div>
-                <h1 class="mb-2">Bienvenue sur le Hub de Rapportage SyDRA</h1>
-                <p class="mb-0 text-muted">Soumettez vos alertes rapides (Flash) ou vos notes de monitoring structurées.</p>
-            </div>
-            <div class="d-flex gap-2 flex-wrap">
-                <a href="?page=rapportage-mes-alertes" class="btn btn-light btn-sm shadow-sm">Gérer toutes les alertes</a>
-                <a href="?page=rapportage-coordination" class="btn btn-light btn-sm shadow-sm">Coordination</a>
-            </div>
-        </div>
+<!-- html2canvas and jsPDF libraries for PDF export -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
-        <div class="row g-3 mb-4">
-            <div class="col-lg-6">
-                <a href="?page=rapportage-creer-wizar" class="hub-action-card hub-action-ai text-decoration-none js-create-alert-link" data-check-draft="1">
-                    <div class="hub-action-icon"><i class="fa-solid fa-plus"></i></div>
-                    <div>
-                        <h2>Nouvelle alerte</h2>
-                        <p class="mb-0">Démarrer directement le formulaire Wizard sécurisé.</p>
+<style>
+/* Appliquer Poppins/Inter globalement sur cette page */
+.report-hub-container {
+    font-family: 'Poppins', 'Inter', sans-serif;
+}
+.hero-premium {
+    background: linear-gradient(135deg, #f8faff 0%, #e6f0ff 100%);
+    border-radius: 20px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+    border: none;
+    padding: 3rem 2rem;
+    text-align: center;
+}
+.hero-premium h1 {
+    font-weight: 800;
+    color: #0f172a;
+    font-size: 2.2rem;
+}
+.hero-premium p {
+    color: #475569;
+    font-size: 1.1rem;
+    max-width: 600px;
+    margin: 0 auto;
+}
+.btn-ai-premium {
+    position: relative;
+    border-radius: 50px !important;
+    font-size: 1.1rem;
+    padding: 14px 40px;
+    font-weight: 700;
+    background: linear-gradient(135deg, #005BBB 0%, #6366f1 100%);
+    color: #ffffff !important;
+    border: none !important;
+    box-shadow: 0 8px 20px rgba(99, 102, 241, 0.3);
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.btn-ai-premium:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 25px rgba(99, 102, 241, 0.45);
+    background: linear-gradient(135deg, #004ea3 0%, #4f46e5 100%);
+}
+.btn-manual-premium {
+    border-radius: 50px !important;
+    font-size: 1.1rem;
+    padding: 14px 40px;
+    font-weight: 700;
+    background-color: #ffffff !important;
+    color: #334155 !important;
+    border: 1.5px solid #cbd5e1 !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+}
+.btn-manual-premium:hover {
+    transform: translateY(-2px);
+    background-color: #f8fafc !important;
+    border-color: #94a3b8 !important;
+    color: #0f172a !important;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+}
+.badge-recommended {
+    position: absolute;
+    top: -12px;
+    right: -10px;
+    background-color: #ff3366;
+    color: white;
+    font-size: 0.7rem;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-weight: bold;
+    box-shadow: 0 4px 10px rgba(255,51,102,0.3);
+    z-index: 10;
+}
+.premium-card {
+    border: none;
+    border-radius: 16px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.04);
+}
+.table-premium th {
+    background-color: #f8fafc;
+    color: #64748b;
+    font-weight: 600;
+    border-bottom: 1px solid #e2e8f0;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.table-premium td {
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+    color: #334155;
+    font-size: 0.95rem;
+}
+.typing-cursor {
+    display: inline-block;
+    width: 3px;
+    height: 1.1em;
+    background-color: #005BBB;
+    vertical-align: text-bottom;
+    animation: blink 1s step-end infinite;
+    margin-left: 4px;
+}
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+}
+</style>
+
+<div class="report-hub-container">
+    <div class="card hero-premium mb-4 text-start">
+        <div class="card-body p-4 p-lg-5">
+            <div class="row align-items-center">
+                <div class="col-lg-7">
+                    <span class="badge bg-primary text-white mb-3 px-3 py-2 rounded-pill fw-bold shadow-sm" style="background-color: #005BBB !important;"><i class="fa-solid fa-sparkles me-1"></i> Nouveau : IA Intégrée</span>
+                    <h1 class="mb-3 display-5 fw-bold text-dark" style="letter-spacing: -0.5px; min-height: 1.2em;">
+                        <span id="hero-typing-text"></span><span class="typing-cursor"></span>
+                    </h1>
+                    <p class="mb-4 text-secondary fs-5" style="max-width: 100%;">
+                        L'Assistant IA de SyDRA analyse vos notes brutes, structure les informations et sécurise votre rapport d'incident en quelques secondes. 
+                        Ne perdez plus de temps sur le formatage.
+                    </p>
+                    <script>
+                        document.addEventListener("DOMContentLoaded", function() {
+                            const phrases = [
+                                "Que s'est-il passé sur le terrain ?",
+                                "Une urgence humanitaire à signaler ?",
+                                "Partagez votre rapport d'incident.",
+                                "L'IA rédige pour vous."
+                            ];
+                            let currentPhrase = 0;
+                            let currentChar = 0;
+                            let isDeleting = false;
+                            const textElement = document.getElementById("hero-typing-text");
+                            
+                            function type() {
+                                const fullText = phrases[currentPhrase];
+                                
+                                if (isDeleting) {
+                                    textElement.textContent = fullText.substring(0, currentChar - 1);
+                                    currentChar--;
+                                } else {
+                                    textElement.textContent = fullText.substring(0, currentChar + 1);
+                                    currentChar++;
+                                }
+                                
+                                let typeSpeed = isDeleting ? 30 : 70;
+                                
+                                if (!isDeleting && currentChar === fullText.length) {
+                                    typeSpeed = 2000; // Wait at end
+                                    isDeleting = true;
+                                } else if (isDeleting && currentChar === 0) {
+                                    isDeleting = false;
+                                    currentPhrase = (currentPhrase + 1) % phrases.length;
+                                    typeSpeed = 500; // Wait before next
+                                }
+                                
+                                setTimeout(type, typeSpeed);
+                            }
+                            
+                            setTimeout(type, 1000); // Initial delay
+                        });
+                    </script>
+                    <div class="d-flex flex-wrap gap-3 align-items-center">
+                        <a href="?page=rapportage-creer-AI" class="btn btn-ai-premium btn-lg">
+                            <span class="badge-recommended">RECOMMANDÉ</span>
+                            <i class="fa-solid fa-wand-magic-sparkles me-2"></i> Lancer l'Assistant IA
+                        </a>
+                        <a href="?page=rapportage-creer-wizar" class="btn btn-manual-premium btn-lg">
+                            <i class="fa-solid fa-pen me-2"></i>Saisie manuelle (Wizard)
+                        </a>
                     </div>
-                </a>
-            </div>
-            <div class="col-lg-6">
-                <a href="?page=rapportage-creer-AI" class="hub-action-card hub-action-manual text-decoration-none">
-                    <div class="hub-action-icon"><i class="fa-solid fa-list-check"></i></div>
-                    <div>
-                        <h2>Assistant IA (optionnel)</h2>
-                        <p class="mb-0">Option d'assistance conversationnelle complémentaire.</p>
+                    <div class="mt-4 pt-3 border-top d-flex gap-2">
+                        <a href="?page=rapportage-mes-alertes" class="btn btn-light btn-sm shadow-sm rounded-pill px-3">Gérer toutes les alertes</a>
+<?php if (isset($_SESSION['role_code']) && in_array($_SESSION['role_code'], ['ADMIN', 'GTMP_LEAD', 'GTMP_COLEAD', 'CLUSTER_LEADER', 'CLUSTER_PROTECTION'])): ?>
+                        <a href="?page=rapportage-coordination" class="btn btn-light btn-sm shadow-sm rounded-pill px-3">Coordination</a>
+<?php endif; ?>
                     </div>
-                </a>
-            </div>
-        </div>
-
-        <div class="card shadow-sm rounded-4 bg-white border-0 mb-4 px-3 py-3" id="hub-filter-bar">
-            <form id="filterForm" method="get" action="?page=rapportage" class="row g-2 align-items-end" autocomplete="off" novalidate>
-                <input type="hidden" name="page" value="rapportage">
-                <div class="col-12 col-sm-6 col-lg-3">
-                    <label for="filter-date-debut" class="form-label mb-1 small fw-semibold text-secondary">
-                        <i class="bi bi-calendar-event me-1"></i>Du
-                    </label>
-                    <input type="date" id="filter-date-debut" name="date_debut" class="form-control form-control-sm" value="<?= htmlspecialchars($selectedDateDebut, ENT_QUOTES, 'UTF-8'); ?>">
                 </div>
-                <div class="col-12 col-sm-6 col-lg-3">
-                    <label for="filter-date-fin" class="form-label mb-1 small fw-semibold text-secondary">
-                        <i class="bi bi-calendar-check me-1"></i>Au
-                    </label>
-                    <input type="date" id="filter-date-fin" name="date_fin" class="form-control form-control-sm" value="<?= htmlspecialchars($selectedDateFin, ENT_QUOTES, 'UTF-8'); ?>">
+                <div class="col-lg-5 text-center mt-4 mt-lg-0 d-none d-lg-block position-relative">
+                    <div class="rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 220px; height: 220px; background: radial-gradient(circle, rgba(0,91,187,0.1) 0%, rgba(0,91,187,0) 70%);">
+                        <i class="fa-solid fa-robot text-primary" style="font-size: 7rem; filter: drop-shadow(0 15px 20px rgba(0,91,187,0.25));"></i>
+                    </div>
+                    <!-- Particules décoratives -->
+                    <i class="fa-solid fa-bolt text-warning position-absolute" style="font-size: 2.5rem; top: 10%; right: 25%; transform: rotate(15deg); filter: drop-shadow(0 4px 6px rgba(245,158,11,0.3));"></i>
+                    <i class="fa-solid fa-shield-halved text-success position-absolute" style="font-size: 2rem; bottom: 20%; left: 20%; transform: rotate(-10deg); filter: drop-shadow(0 4px 6px rgba(16,185,129,0.3));"></i>
+                    <i class="fa-solid fa-location-dot text-danger position-absolute" style="font-size: 1.5rem; top: 30%; left: 25%; filter: drop-shadow(0 4px 6px rgba(239,68,68,0.3));"></i>
                 </div>
-
-                <?php if ($isLeadOrAdmin): ?>
-                <div class="col-12 col-sm-8 col-lg-4">
-                    <label for="filter-org" class="form-label mb-1 small fw-semibold text-secondary">
-                        <i class="bi bi-building me-1"></i>Organisation
-                    </label>
-                    <select id="filter-org" name="organisation_id" class="form-select form-select-sm">
-                        <option value="">Toutes les organisations</option>
-                        <?php foreach ($rapportageOrganizations as $org): ?>
-                            <?php $orgId = (string) ((int) ($org['id'] ?? 0)); ?>
-                            <option value="<?= (int) ($org['id'] ?? 0); ?>" <?= ($selectedOrgId !== '' && $selectedOrgId === $orgId) ? 'selected' : ''; ?>><?= htmlspecialchars((string) ($org['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <?php else: ?>
-                <div class="col-12 col-sm-8 col-lg-4">
-                    <label class="form-label mb-1 small fw-semibold text-secondary">
-                        <i class="bi bi-building me-1"></i>Organisation
-                    </label>
-                    <input type="text" class="form-control form-control-sm bg-light" value="<?= $userOrgName; ?>" readonly>
-                    <input type="hidden" name="organisation_id" value="<?= $userOrgId; ?>">
-                </div>
-                <?php endif; ?>
-
-                <div class="col-12 col-sm-4 col-lg-2 d-flex align-items-end">
-                    <button type="submit" id="btn-filtrer" class="btn btn-sm w-100 hub-btn-filter">
-                        <i class="bi bi-search me-1"></i>Filtrer
-                    </button>
-                    <button type="button" id="btn-reset-filter" class="btn btn-sm btn-outline-secondary ms-2" title="Réinitialiser">
-                        <i class="bi bi-x-lg"></i>
-                    </button>
-                </div>
-            </form>
-
-            <div id="filter-status" class="d-none mt-2">
-                <span class="badge text-bg-info fs-7" id="filter-status-text"></span>
-            </div>
-        </div>
-
-        <div class="row g-2 stats-grid">
-            <div class="col-6 col-lg-3">
-                <div class="kpi-card kpi-blue shadow-sm rounded-4"><small>Total Alertes</small><strong id="stat-total"><?= (int) $stats['total']; ?></strong></div>
-            </div>
-            <div class="col-6 col-lg-3">
-                <div class="kpi-card kpi-red shadow-sm rounded-4"><small>Alertes Critiques</small><strong id="stat-critiques"><?= (int) $stats['critiques']; ?></strong></div>
-            </div>
-            <div class="col-6 col-lg-3">
-                <div class="kpi-card kpi-orange shadow-sm rounded-4"><small>En attente de validation</small><strong id="stat-attente"><?= (int) $stats['attente']; ?></strong></div>
-            </div>
-            <div class="col-6 col-lg-3">
-                <div class="kpi-card kpi-green shadow-sm rounded-4"><small>Rapports Validés</small><strong id="stat-valides"><?= (int) $stats['valides']; ?></strong></div>
             </div>
         </div>
     </div>
-</div>
 
-<div class="card shadow-sm rounded-4 border-0 mt-3">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-        <div>
-            <h2 class="mb-1">Cartographie des incidents récents</h2>
-        </div>
-        <div class="d-flex gap-2 align-items-center">
-            <button type="button" id="btn-export-map" class="btn btn-sm btn-outline-primary">
-                <i class="fa-solid fa-file-pdf me-1"></i>Exporter la carte
-            </button>
-            <span class="badge text-bg-light border" id="map-counter"><?= count($rapportageMapAlerts ?? []); ?> point(s)</span>
-            <span class="badge text-bg-light border">Vue terrain sécurisée</span>
+    <!-- FILTER BAR -->
+    <div class="card shadow-sm premium-card bg-white mb-4 p-3" id="hub-filter-bar">
+        <form id="filterForm" method="get" action="?page=rapportage" class="row g-2 align-items-end" autocomplete="off" novalidate>
+            <input type="hidden" name="page" value="rapportage">
+            <div class="col-12 col-sm-6 col-lg-3">
+                <label for="filter-date-debut" class="form-label mb-1 small fw-semibold text-secondary">
+                    <i class="bi bi-calendar-event me-1"></i>Du
+                </label>
+                <input type="date" id="filter-date-debut" name="date_debut" class="form-control form-control-sm rounded-pill px-3" value="<?= htmlspecialchars($selectedDateDebut, ENT_QUOTES, 'UTF-8'); ?>">
+            </div>
+            <div class="col-12 col-sm-6 col-lg-3">
+                <label for="filter-date-fin" class="form-label mb-1 small fw-semibold text-secondary">
+                    <i class="bi bi-calendar-check me-1"></i>Au
+                </label>
+                <input type="date" id="filter-date-fin" name="date_fin" class="form-control form-control-sm rounded-pill px-3" value="<?= htmlspecialchars($selectedDateFin, ENT_QUOTES, 'UTF-8'); ?>">
+            </div>
+
+            <?php if ($isLeadOrAdmin): ?>
+            <div class="col-12 col-sm-8 col-lg-4">
+                <label for="filter-org" class="form-label mb-1 small fw-semibold text-secondary">
+                    <i class="bi bi-building me-1"></i>Organisation
+                </label>
+                <select id="filter-org" name="organisation_id" class="form-select form-select-sm rounded-pill px-3">
+                    <option value="">Toutes les organisations</option>
+                    <?php foreach ($rapportageOrganizations as $org): ?>
+                        <?php $orgId = (string) ((int) ($org['id'] ?? 0)); ?>
+                        <option value="<?= (int) ($org['id'] ?? 0); ?>" <?= ($selectedOrgId !== '' && $selectedOrgId === $orgId) ? 'selected' : ''; ?>><?= htmlspecialchars((string) ($org['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <?php else: ?>
+            <div class="col-12 col-sm-8 col-lg-4">
+                <label class="form-label mb-1 small fw-semibold text-secondary">
+                    <i class="bi bi-building me-1"></i>Organisation
+                </label>
+                <input type="text" class="form-control form-control-sm bg-light rounded-pill px-3" value="<?= $userOrgName; ?>" readonly>
+                <input type="hidden" name="organisation_id" value="<?= $userOrgId; ?>">
+            </div>
+            <?php endif; ?>
+
+            <div class="col-12 col-sm-4 col-lg-2 d-flex align-items-end">
+                <button type="submit" id="btn-filtrer" class="btn btn-primary btn-sm w-100 rounded-pill">
+                    <i class="bi bi-search me-1"></i>Filtrer
+                </button>
+                <button type="button" id="btn-reset-filter" class="btn btn-sm btn-outline-secondary ms-2 rounded-pill" title="Réinitialiser">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+        </form>
+        <div id="filter-status" class="d-none mt-2">
+            <span class="badge text-bg-info fs-7 rounded-pill" id="filter-status-text"></span>
         </div>
     </div>
 
-    <div id="rapportage-hub-map" class="hub-map rounded-4" data-alerts='<?= htmlspecialchars($alertsPayload, ENT_QUOTES, 'UTF-8'); ?>'></div>
-</div>
+    <!-- STATS GRID -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-lg-3">
+            <div class="card premium-card p-3"><small class="text-secondary fw-semibold">Total Alertes</small><strong class="fs-4 text-primary" id="stat-total"><?= (int) $stats['total']; ?></strong></div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card premium-card p-3"><small class="text-secondary fw-semibold">Alertes Critiques</small><strong class="fs-4 text-danger" id="stat-critiques"><?= (int) $stats['critiques']; ?></strong></div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card premium-card p-3"><small class="text-secondary fw-semibold">En attente de validation</small><strong class="fs-4 text-warning" id="stat-attente"><?= (int) $stats['attente']; ?></strong></div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card premium-card p-3"><small class="text-secondary fw-semibold">Rapports Validés</small><strong class="fs-4 text-success" id="stat-valides"><?= (int) $stats['valides']; ?></strong></div>
+        </div>
+    </div>
+
+    <!-- ZONE EXPORT PDF (CARTE + ALERTES + GRAPHICS) -->
+    <div id="pdf-export-area" class="p-3 bg-white mb-4" style="border-radius: 16px;">
+        <div id="pdf-header" style="display: none; text-align: center; margin-bottom: 30px; padding-top: 20px;">
+            <!-- Utilisation du logo bleu officiel de SyDRA -->
+            <img src="assets/img/sydra-logo/BLEU-PRIMARY-SYDRA-LOGO.png" alt="Logo SyDRA" style="height: 60px; object-fit: contain;">
+            <h2 style="color: #0d6efd; margin-top: 15px; font-weight: bold; font-family: 'Inter', sans-serif;">Rapport Global de Monitoring des Incidents</h2>
+            <p style="color: #6c757d; font-size: 14px; font-family: 'Inter', sans-serif;">Généré le : <?php echo date('d/m/Y à H:i'); ?></p>
+            <hr style="border-top: 2px solid #0d6efd; width: 50px; margin: 15px auto;">
+        </div>
+    <!-- CARTE -->
+    <div class="row g-4 mb-4">
+        <div class="col-12">
+            <div class="card premium-card p-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h2 class="h5 fw-bold mb-0">Cartographie des Incidents</h2>
+                    <span class="badge bg-light text-dark border rounded-pill"><?= count($initialAlerts); ?> point(s)</span>
+                </div>
+                <div id="rapportage-hub-map" class="hub-map rounded-4 w-100 shadow-sm" style="height: 550px; border: 1px solid #e2e8f0;" data-alerts='<?= htmlspecialchars($alertsPayload, ENT_QUOTES, 'UTF-8'); ?>'></div>
+                <div class="mt-3 text-center">
+                    <button id="btnExportDashboard" class="btn btn-primary rounded-pill shadow-sm px-4">
+                        <span class="btn-text"><i class="fa-solid fa-file-pdf me-2"></i> Exporter le Rapport PDF</span>
+                        <span class="btn-loader d-none"><i class="fa-solid fa-circle-notch fa-spin me-2"></i> Génération en cours (Veuillez patienter)...</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MES ALERTES RÉCENTES -->
+    <div class="row g-4 mb-4">
+        <div class="col-12">
+            <div class="card premium-card p-0 overflow-hidden">
+                <div class="d-flex justify-content-between align-items-center p-4 border-bottom bg-white">
+                    <h2 class="h5 fw-bold mb-0">Mes Alertes Récentes</h2>
+                    <a href="?page=rapportage-mes-alertes" class="btn btn-primary btn-sm rounded-pill px-4 shadow-sm">Voir toutes les alertes</a>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover table-premium mb-0 align-middle">
+                        <thead class="bg-light">
+                            <tr>
+                                <th class="ps-4">Réf</th>
+                                <th>Localisation</th>
+                                <th>Type d'Incident</th>
+                                <th>Statut</th>
+                                <th class="pe-4 text-end">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php 
+                            $recentCount = 0;
+                            foreach ($initialAlerts as $alertItem): 
+                                if ($recentCount >= 5) break;
+                                $recentCount++;
+                                $status = strtolower($alertItem['workflow_status'] ?? '');
+                                $badgeClass = 'bg-secondary';
+                                if (strpos($status, 'brouillon') !== false) $badgeClass = 'bg-warning text-dark';
+                                if (strpos($status, 'soumis') !== false) $badgeClass = 'bg-primary';
+                                if (strpos($status, 'valide') !== false || strpos($status, 'approuve') !== false) $badgeClass = 'bg-success';
+                            ?>
+                            <tr style="cursor: pointer;" onclick="window.location.href='?page=rapportage-mes-alertes&id=<?= (int)($alertItem['id'] ?? 0); ?>'">
+                                <td class="ps-4 fw-bold text-primary">#<?= (int)($alertItem['id'] ?? 0); ?></td>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <div class="rounded-circle bg-light d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px;">
+                                            <i class="fa-solid fa-location-dot text-danger"></i>
+                                        </div>
+                                        <div>
+                                            <div class="fw-bold text-dark"><?= htmlspecialchars($alertItem['location_text'] ?? 'Non précisée', ENT_QUOTES, 'UTF-8'); ?></div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="fw-medium text-dark">
+                                        <?= htmlspecialchars($alertItem['incident_type'] ?? 'Incident', ENT_QUOTES, 'UTF-8'); ?>
+                                    </div>
+                                    <?php if (isset($alertItem['is_ai_generated']) && $alertItem['is_ai_generated'] == 1): ?>
+                                        <span class="badge rounded-pill mt-1" style="background-color: #f3e8ff; color: #7e22ce; border: 1px solid #d8b4fe; font-size: 0.65rem;"><i class="fa-solid fa-wand-magic-sparkles me-1"></i>Généré par l'IA</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <span class="badge rounded-pill <?= $badgeClass; ?> px-3 py-2 fw-semibold" style="font-size: 0.75rem;">
+                                        <i class="fa-solid fa-circle me-1" style="font-size: 0.5rem; vertical-align: middle;"></i>
+                                        <?= htmlspecialchars($alertItem['workflow_status'] ?? 'Brouillon', ENT_QUOTES, 'UTF-8'); ?>
+                                    </span>
+                                </td>
+                                <td class="pe-4 text-end">
+                                    <button class="btn btn-sm btn-light rounded-circle shadow-sm" style="width: 32px; height: 32px;">
+                                        <i class="fa-solid fa-chevron-right text-secondary"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                            <?php if ($recentCount === 0): ?>
+                            <tr>
+                                <td colspan="5" class="text-center py-5">
+                                    <div class="text-muted mb-2"><i class="fa-solid fa-folder-open fs-1"></i></div>
+                                    <h6 class="fw-bold text-dark">Aucune alerte récente</h6>
+                                    <p class="text-secondary small">Créez votre première alerte avec l'Assistant IA.</p>
+                                </td>
+                            </tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
 
 <div class="row g-3 mt-1">
     <div class="col-xl-7">
@@ -214,36 +470,10 @@ if ($selectedOrgId !== '' && ctype_digit($selectedOrgId) === false) {
         </div>
     </div>
 </div>
+</div><!-- /pdf-export-area -->
 
 <style>
-.report-hub-hero { position: relative; overflow: hidden; border: 1px solid #dbeafe; }
-.report-hub-bg {
-    position: absolute;
-    inset: 0;
-    background:
-        radial-gradient(circle at 15% 20%, rgba(0, 91, 187, 0.20), transparent 42%),
-        radial-gradient(circle at 85% 10%, rgba(14, 165, 233, 0.14), transparent 38%),
-        linear-gradient(140deg, #f8fbff 0%, #eef6ff 100%);
-}
-.report-hub-content { position: relative; z-index: 1; }
-
-.hub-action-card {
-    display: flex; gap: 12px; align-items: center; border: 1px solid #dbeafe; border-radius: 16px;
-    padding: 16px; min-height: 124px; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
-}
-.hub-action-card:hover { transform: translateY(-3px); box-shadow: 0 18px 30px rgba(2, 6, 23, 0.09); border-color: #9cc5ff; }
-.hub-action-card h2 { font-size: 17px; margin: 0 0 5px; color: #0f172a; }
-.hub-action-card p { color: #334155; }
-.hub-action-icon {
-    width: 52px; height: 52px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center;
-    font-size: 24px; color: #fff; flex: 0 0 auto;
-}
-.hub-action-ai { background: linear-gradient(140deg, #005bbb 0%, #3a86ff 65%, #7b61ff 100%); }
-.hub-action-ai h2, .hub-action-ai p { color: #fff; }
-.hub-action-ai .hub-action-icon { background: rgba(255,255,255,0.24); }
-.hub-action-manual { background: #fff; }
-.hub-action-manual .hub-action-icon { background: #005bbb; }
-
+/* Autres styles conservés mais adaptés pour le conteneur */
 #hub-filter-bar { border: 1px solid #e2e8f0; }
 .hub-btn-filter { background: #005BBB; color: #fff; border: none; font-weight: 600; }
 .hub-btn-filter:hover { background: #0047a0; color: #fff; }
@@ -348,8 +578,7 @@ if ($selectedOrgId !== '' && ctype_digit($selectedOrgId) === false) {
 .hub-map-legend-dot { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 auto; border: 2px solid rgba(0,0,0,0.18); }
 
 .chart-card { border: 1px solid #dbeafe; padding: 14px; background: linear-gradient(170deg, #ffffff 0%, #f8fbff 100%); }
-.hub-chart-canvas { display: none; }
-#severityPieChart {
+#incidentsTrendChart, #severityPieChart {
     display: block;
     width: 100%;
     height: 180px !important;
@@ -894,7 +1123,7 @@ if ($selectedOrgId !== '' && ctype_digit($selectedOrgId) === false) {
             attribution: '&copy; OpenStreetMap contributors'
         }).addTo(hubMap);
 
-        markersLayer = window.L.layerGroup().addTo(hubMap);
+        markersLayer = window.L.featureGroup().addTo(hubMap);
         addLegend(hubMap);
 
         var raw = mapEl.getAttribute('data-alerts') || '[]';
@@ -1064,33 +1293,41 @@ if ($selectedOrgId !== '' && ctype_digit($selectedOrgId) === false) {
     }
 
     function updateCharts(chartsPayload) {
-        if (!window.Chart) {
-            renderChartsFallback(chartsPayload || {});
-            renderTrendAlt(chartsPayload && chartsPayload.trend ? chartsPayload.trend : { labels: [], values: [] });
-            renderSeverityAlt(chartsPayload && chartsPayload.severity ? chartsPayload.severity : { labels: [], values: [] });
-            return;
-        }
-
-        var trendStatic = document.getElementById('trend-static');
-        var severityStatic = document.getElementById('severity-static');
-        if (trendStatic) {
-            trendStatic.style.display = 'none';
-        }
-        if (severityStatic) {
-            severityStatic.style.display = 'none';
-        }
-
         var trendCanvas = document.getElementById('incidentsTrendChart');
         var severityCanvas = document.getElementById('severityPieChart');
-        if (trendCanvas) trendCanvas.style.display = 'none';
-        if (severityCanvas) severityCanvas.style.display = 'block';
+        var trendAlt = document.getElementById('trend-alt');
+        var severityAlt = document.getElementById('severity-alt');
+        var trendStatic = document.getElementById('trend-static');
+        var severityStatic = document.getElementById('severity-static');
         var trendFallback = document.getElementById('trend-fallback');
         var severityFallback = document.getElementById('severity-fallback');
-        if (trendFallback) trendFallback.style.display = 'none';
-        if (severityFallback) severityFallback.style.display = 'none';
 
         var trend = chartsPayload && chartsPayload.trend ? chartsPayload.trend : { labels: [], values: [] };
         var severity = chartsPayload && chartsPayload.severity ? chartsPayload.severity : { labels: [], values: [] };
+
+        if (!window.Chart) {
+            if (trendCanvas) trendCanvas.style.display = 'none';
+            if (severityCanvas) severityCanvas.style.display = 'none';
+            if (trendAlt) trendAlt.style.display = 'block';
+            if (severityAlt) severityAlt.style.display = 'block';
+            if (trendStatic) trendStatic.style.display = 'block';
+            if (severityStatic) severityStatic.style.display = 'block';
+
+            renderChartsFallback(chartsPayload || {});
+            renderTrendAlt(trend);
+            renderSeverityAlt(severity);
+            return;
+        }
+
+        if (trendStatic) trendStatic.style.display = 'none';
+        if (severityStatic) severityStatic.style.display = 'none';
+        if (trendFallback) trendFallback.style.display = 'none';
+        if (severityFallback) severityFallback.style.display = 'none';
+
+        if (trendCanvas) trendCanvas.style.display = 'block';
+        if (severityCanvas) severityCanvas.style.display = 'block';
+        if (trendAlt) trendAlt.style.display = 'none';
+        if (severityAlt) severityAlt.style.display = 'none';
 
         if (trendChart) {
             trendChart.data.labels = Array.isArray(trend.labels) ? trend.labels : [];
@@ -1103,9 +1340,6 @@ if ($selectedOrgId !== '' && ctype_digit($selectedOrgId) === false) {
             severityChart.data.datasets[0].data = Array.isArray(severity.values) ? severity.values : [];
             severityChart.update();
         }
-
-        renderTrendAlt(trend);
-        renderSeverityAlt(severity);
     }
 
     function renderTrendAlt(trend) {
@@ -1440,12 +1674,30 @@ if ($selectedOrgId !== '' && ctype_digit($selectedOrgId) === false) {
 
             // Mise à jour des graphiques
             var chartData = data.chart_data || [];
+            var markers = Array.isArray(data.map_markers) ? data.map_markers : [];
             var visualsCharts = { trend: { labels: [], values: [] }, severity: { labels: [], values: [] } };
             // Transformation de chartData (period => total) vers le format attendu par les graphiques
             chartData.forEach(function(row) {
                 visualsCharts.trend.labels.push(row.period);
                 visualsCharts.trend.values.push(row.total);
             });
+
+            // Calcul de la répartition par gravité à partir des marqueurs filtrés
+            var severityMap = { 'Critique': 0, 'Élevée': 0, 'Moyenne': 0, 'Faible': 0 };
+            markers.forEach(function (m) {
+                var sev = severityScore(m.urgency_level || 'Faible').label;
+                if (!Object.prototype.hasOwnProperty.call(severityMap, sev)) {
+                    severityMap[sev] = 0;
+                }
+                severityMap[sev] += 1;
+            });
+            ['Critique', 'Élevée', 'Moyenne', 'Faible'].forEach(function (label) {
+                if (severityMap[label] > 0) {
+                    visualsCharts.severity.labels.push(label);
+                    visualsCharts.severity.values.push(severityMap[label]);
+                }
+            });
+
             updateCharts(visualsCharts);
             
             // Mise à jour du résumé textuel (statut)
@@ -1502,7 +1754,7 @@ if ($selectedOrgId !== '' && ctype_digit($selectedOrgId) === false) {
     function bindFilterForm() {
         var form = document.getElementById('filterForm');
         var reset = document.getElementById('btn-reset-filter');
-        var exportBtn = document.getElementById('btn-export-map');
+        var exportBtn = document.getElementById('btnExportDashboard');
         if (!form) return;
 
         function syncUrl(paramsString) {
@@ -1547,8 +1799,107 @@ if ($selectedOrgId !== '' && ctype_digit($selectedOrgId) === false) {
         }
 
         if (exportBtn) {
-            exportBtn.addEventListener('click', function () {
-                exportMapReport();
+            exportBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                
+                let btn = this;
+                let btnText = btn.querySelector('.btn-text');
+                let btnLoader = btn.querySelector('.btn-loader');
+                
+                // 1. Bloquer l'UI
+                if (btnText && btnLoader) {
+                    btn.classList.add('disabled');
+                    btnText.classList.add('d-none');
+                    btnLoader.classList.remove('d-none');
+                }
+
+                // 2. Préparer la carte Leaflet
+                let map = typeof hubMap !== 'undefined' ? hubMap : undefined;
+                let markerGroup = typeof markersLayer !== 'undefined' ? markersLayer : undefined;
+                if (typeof map !== 'undefined' && typeof markerGroup !== 'undefined' && markerGroup.getLayers().length > 0) {
+                    if (map.dragging) map.dragging.disable();
+                    map.fitBounds(markerGroup.getBounds(), { padding: [2, 2], animate: false });
+                    map.invalidateSize();
+                }
+
+                // 3. Afficher l'en-tête fantôme pour le PDF
+                const pdfHeader = document.getElementById('pdf-header');
+                if (pdfHeader) pdfHeader.style.display = 'block';
+
+                // 4. Attendre le rendu de la carte et des graphiques
+                setTimeout(function() {
+                    const exportArea = document.getElementById('pdf-export-area');
+                    if (!exportArea) {
+                        console.error("Export area not found");
+                        if (pdfHeader) pdfHeader.style.display = 'none';
+                        if (btnText && btnLoader) {
+                            btn.classList.remove('disabled');
+                            btnText.classList.remove('d-none');
+                            btnLoader.classList.add('d-none');
+                        }
+                        return;
+                    }
+                    
+                    // Configuration Haute Qualité (Netteté maximale)
+                    const html2canvasOptions = {
+                        scale: 2, // Échelle 2 = Résolution Retina/DPI doublé pour des textes et graphiques ultra-nets
+                        useCORS: true, 
+                        allowTaint: false,
+                        backgroundColor: '#ffffff',
+                        logging: false,
+                        // LE FILTRE MAGIQUE : Ignore tous les boutons et liens d'action
+                        ignoreElements: function(element) {
+                            if (element.tagName && element.tagName.toLowerCase() === 'button') return true;
+                            if (element.classList && element.classList.contains('btn')) return true;
+                            return false;
+                        }
+                    };
+
+                    html2canvas(exportArea, html2canvasOptions).then(function(canvas) {
+                        // Cacher immédiatement l'en-tête fantôme
+                        if (pdfHeader) pdfHeader.style.display = 'none';
+
+                        // Image compressée à 95% pour une qualité optimale sans perte visible
+                        const imgData = canvas.toDataURL('image/jpeg', 0.95); 
+                        
+                        const { jsPDF } = window.jspdf;
+                        const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4', compress: true });
+
+                        const pdfWidth = pdf.internal.pageSize.getWidth();
+                        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+                        
+                        // On insère l'image tout en haut (y=0) puisque le titre est DANS l'image désormais
+                        pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+                        
+                        pdf.save('SyDRA_Rapport_Global.pdf');
+
+                        // Restaurer l'UI
+                        if (typeof map !== 'undefined' && map.dragging) map.dragging.enable();
+                        if (btnText && btnLoader) {
+                            btn.classList.remove('disabled');
+                            btnText.classList.remove('d-none');
+                            btnLoader.classList.add('d-none');
+                        }
+                        
+                        if (window.toastr) {
+                            toastr.success('Rapport PDF généré avec succès !');
+                        }
+
+                    }).catch(function(error) {
+                        console.error('Erreur PDF:', error);
+                        if (pdfHeader) pdfHeader.style.display = 'none'; // Sécurité
+                        if (typeof map !== 'undefined' && map.dragging) map.dragging.enable();
+                        if (btnText && btnLoader) {
+                            btn.classList.remove('disabled');
+                            btnText.classList.remove('d-none');
+                            btnLoader.classList.add('d-none');
+                        }
+                        if (window.toastr) {
+                            toastr.error('Erreur lors de la génération.');
+                        }
+                    });
+
+                }, 2000); 
             });
         }
     }
@@ -1644,3 +1995,5 @@ if ($selectedOrgId !== '' && ctype_digit($selectedOrgId) === false) {
     }
 })();
 </script>
+</div>
+<!-- /report-hub-container -->

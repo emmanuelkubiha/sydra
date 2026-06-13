@@ -1,3 +1,16 @@
+<?php if (!isset($_SESSION['auth_user_id']) || (int) ($_SESSION['auth_user_id'] ?? 0) <= 0): ?>
+	<div class="text-center mt-5 mb-4">
+		<?php $currentLang = function_exists('current_lang') ? current_lang() : ($lang ?? 'fr'); ?>
+		<form action="" method="get" class="d-inline-block text-muted" style="font-size: 0.85rem;">
+			<input type="hidden" name="page" value="<?= htmlspecialchars($_GET['page'] ?? 'login', ENT_QUOTES, 'UTF-8'); ?>">
+			<i class="fa-solid fa-globe me-1"></i>Langue :
+			<select name="lang" class="form-select form-select-sm border-0 bg-transparent text-muted fw-bold d-inline-block w-auto p-0 ms-1" onchange="this.form.submit()" aria-label="Language" style="cursor: pointer; box-shadow: none;">
+				<option value="fr" <?= $currentLang === 'fr' ? 'selected' : ''; ?>>Français</option>
+				<option value="en" <?= $currentLang === 'en' ? 'selected' : ''; ?>>English</option>
+			</select>
+		</form>
+	</div>
+<?php endif; ?>
 		</div>
 	</main>
 </div>
