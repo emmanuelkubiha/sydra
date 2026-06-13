@@ -601,7 +601,7 @@ option[value="Critique"]{ color: #dc2626; }
                 <div class="step-card mt-3" id="wizard-recap-card">
                     <div class="step-section-title">Checklist interactive de validation</div>
                     <p class="text-muted small mb-3">Veuillez vérifier les éléments ci-dessous avant de soumettre le rapport d'incident. Vous pouvez compléter les informations manquantes en cliquant sur les boutons.</p>
-                    <div id="recapChecklist" class="list-group gap-2 border-0">
+                    <div id="recapChecklist" class="accordion border-0">
                         <!-- Rempli dynamiquement via JS -->
                     </div>
                 </div>
@@ -999,67 +999,180 @@ option[value="Critique"]{ color: #dc2626; }
         if (!recapContainer) return;
         recapContainer.innerHTML = ''; // Vider avant de remplir
 
-        // 1. Vérification Localisation (Étape 1)
-        const provinceEl = document.getElementById('wiz_province');
-        const province = provinceEl ? provinceEl.value.trim() : '';
-        const isLocationMissing = !province || province === 'Non renseigné' || province === '—' || province === '0';
-        recapContainer.innerHTML += createChecklistItem(
-            '📍 Localisation (Province, Territoire, Village)', 
-            isLocationMissing, 
-            1 // Numéro de l'étape pour le stepper (1-indexed pour stepper.to())
-        );
+        // Récupérer les valeurs des champs
+        const getVal = (id) => {
+            const el = document.getElementById(id);
+            return el ? el.value.trim() : '';
+        };
 
-        // 2. Vérification GPS (Étape 1) - TRÈS IMPORTANT
-        const latEl = document.getElementById('gps_lat');
-        const lat = latEl ? latEl.value.trim() : '';
+        const province = getVal('wiz_province');
+        const territory = getVal('wiz_territory');
+        const healthZone = getVal('wiz_health_zone');
+        const village = getVal('wiz_village');
+        const lat = getVal('gps_lat');
+        const lng = getVal('gps_lng');
+
+        const incident = getVal('wiz_incident_type');
+        const gravity = getVal('wiz_urgency_level');
+        const victims = getVal('wiz_victims_count') || '0';
+        const displaced = getVal('wiz_displaced') || '0';
+        const facts = getVal('wiz_facts_text');
+
+        const analysis = getVal('wiz_analysis_text');
+        const needs = getVal('wiz_priority_needs');
+        const recs = getVal('wiz_recommendations_text');
+
+        // Déterminer s'il manque des éléments
+        const isLocMissing = !province || province === 'Non renseigné' || province === '—' || province === '0';
         const isGPSMissing = !lat || lat === '—' || lat === '0' || lat === '';
-        
-        recapContainer.innerHTML += `
-            <div class="list-group-item d-flex justify-content-between align-items-center ${isGPSMissing ? 'bg-danger-subtle border-danger text-danger-emphasis' : 'bg-success-subtle border-success text-success-emphasis'}" style="border-radius: 12px; margin-bottom: 8px; border: 1.5px solid !important; padding: 14px 20px;">
-                <div class="text-start">
-                    <i class="fa-solid ${isGPSMissing ? 'fa-location-crosshairs text-danger' : 'fa-check text-success'} me-2 fs-5"></i>
-                    <strong>Coordonnées GPS</strong>
-                    ${isGPSMissing ? '<br><small class="text-danger d-block mt-1 fw-medium"><i class="fa-solid fa-circle-exclamation me-1"></i> Obligatoire pour la cartographie. Cliquez sur le bouton pour capter le GPS.</small>' : ''}
+        const isFactsMissing = !facts || facts === 'Non renseigné' || facts === '—' || facts === '0';
+        const isRecsMissing = !recs || recs === 'Non renseigné' || recs === '—' || recs === '0';
+
+        // 1. Localisation Accordion Item
+        const locHTML = `
+            <div class="accordion-item mb-3 border rounded-3 overflow-hidden shadow-sm">
+                <h2 class="accordion-header" id="headingLoc">
+                    <button class="accordion-button collapsed py-3 d-flex justify-content-between align-items-center bg-white" type="button" data-bs-toggle="collapse" data-bs-target="#collapseLoc" aria-expanded="false" aria-controls="collapseLoc" style="box-shadow: none;">
+                        <div class="d-flex align-items-center w-100 me-3">
+                            <i class="fa-solid ${isLocMissing ? 'fa-triangle-exclamation text-warning' : 'fa-circle-check text-success'} fs-5 me-3"></i>
+                            <div class="flex-grow-1 text-start">
+                                <span class="fw-semibold text-dark fs-6">Localisation administrative</span>
+                                <span class="d-block text-secondary small mt-0.5">${province ? `${province}, ${territory || ''} (${village || ''})` : 'Informations de localisation'}</span>
+                            </div>
+                            <span class="badge ${isLocMissing ? 'bg-warning text-dark' : 'bg-success'} rounded-pill px-3 py-1.5 fs-7 ms-auto">${isLocMissing ? 'Incomplet' : 'OK'}</span>
+                        </div>
+                    </button>
+                </h2>
+                <div id="collapseLoc" class="accordion-collapse collapse" aria-labelledby="headingLoc" data-bs-parent="#recapChecklist">
+                    <div class="accordion-body bg-light-subtle text-start p-4 border-top">
+                        <div class="row g-3">
+                            <div class="col-sm-6"><strong>Province :</strong> <span class="text-secondary">${province || 'Non renseigné'}</span></div>
+                            <div class="col-sm-6"><strong>Territoire :</strong> <span class="text-secondary">${territory || 'Non renseigné'}</span></div>
+                            <div class="col-sm-6"><strong>Zone de santé :</strong> <span class="text-secondary">${healthZone || 'Non renseigné'}</span></div>
+                            <div class="col-sm-6"><strong>Village / Localité :</strong> <span class="text-secondary">${village || 'Non renseigné'}</span></div>
+                        </div>
+                        <div class="mt-4 pt-3 border-top d-flex justify-content-end">
+                            <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3" onclick="if(typeof stepper !== 'undefined' && stepper) { stepper.to(1); }">
+                                <i class="fa-solid fa-pen-to-square me-1"></i> Modifier la localisation
+                            </button>
+                        </div>
+                    </div>
                 </div>
-                ${isGPSMissing ? '<button type="button" class="btn btn-sm btn-danger rounded-pill shadow-sm px-3 py-1.5 fw-semibold" onclick="getLocation()"><i class="fa-solid fa-satellite-dish me-1"></i> Capter le GPS</button>' : '<span class="badge bg-success rounded-pill px-3 py-1.5 fs-7">OK</span>'}
             </div>
         `;
 
-        // 3. Vérification Bilan & Faits (Étape 2)
-        const factsEl = document.getElementById('wiz_facts_text');
-        const facts = factsEl ? factsEl.value.trim() : '';
-        const isFactsMissing = !facts || facts === 'Non renseigné' || facts === '—' || facts === '0';
-        recapContainer.innerHTML += createChecklistItem(
-            '⚠️ Faits et Bilan (Victimes, Déplacés, Résumé)', 
-            isFactsMissing, 
-            2
-        );
+        // 2. GPS Accordion Item
+        const gpsHTML = `
+            <div class="accordion-item mb-3 border rounded-3 overflow-hidden shadow-sm">
+                <h2 class="accordion-header" id="headingGPS">
+                    <button class="accordion-button collapsed py-3 d-flex justify-content-between align-items-center bg-white" type="button" data-bs-toggle="collapse" data-bs-target="#collapseGPS" aria-expanded="false" aria-controls="collapseGPS" style="box-shadow: none;">
+                        <div class="d-flex align-items-center w-100 me-3">
+                            <i class="fa-solid ${isGPSMissing ? 'fa-location-crosshairs text-danger animate-pulse' : 'fa-circle-check text-success'} fs-5 me-3"></i>
+                            <div class="flex-grow-1 text-start">
+                                <span class="fw-semibold text-dark fs-6">Coordonnées GPS</span>
+                                <span class="d-block text-secondary small mt-0.5">${!isGPSMissing ? `Latitude: ${lat} / Longitude: ${lng}` : 'Obligatoire pour la cartographie'}</span>
+                            </div>
+                            <span class="badge ${isGPSMissing ? 'bg-danger' : 'bg-success'} rounded-pill px-3 py-1.5 fs-7 ms-auto">${isGPSMissing ? 'Manquant' : 'OK'}</span>
+                        </div>
+                    </button>
+                </h2>
+                <div id="collapseGPS" class="accordion-collapse collapse" aria-labelledby="headingGPS" data-bs-parent="#recapChecklist">
+                    <div class="accordion-body bg-light-subtle text-start p-4 border-top">
+                        <div class="row g-3">
+                            <div class="col-sm-6"><strong>Latitude :</strong> <span class="text-secondary">${lat || 'Non renseigné'}</span></div>
+                            <div class="col-sm-6"><strong>Longitude :</strong> <span class="text-secondary">${lng || 'Non renseigné'}</span></div>
+                        </div>
+                        <div class="mt-4 pt-3 border-top d-flex justify-content-between align-items-center">
+                            <span class="text-danger small fw-medium">${isGPSMissing ? '<i class="fa-solid fa-circle-exclamation me-1"></i> Position indispensable pour la cartographie interactive' : ''}</span>
+                            <div class="d-flex gap-2">
+                                ${isGPSMissing ? '<button type="button" class="btn btn-sm btn-danger rounded-pill px-3" onclick="getLocation()"><i class="fa-solid fa-satellite-dish me-1"></i> Capter ma position</button>' : ''}
+                                <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3" onclick="if(typeof stepper !== 'undefined' && stepper) { stepper.to(1); }">
+                                    <i class="fa-solid fa-map-location-dot me-1"></i> Placer sur la carte
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
 
-        // 4. Vérification Recommandations (Étape 3)
-        const recsEl = document.getElementById('wiz_recommendations_text');
-        const recs = recsEl ? recsEl.value.trim() : '';
-        const isRecsMissing = !recs || recs === 'Non renseigné' || recs === '—' || recs === '0';
-        recapContainer.innerHTML += createChecklistItem(
-            '💡 Recommandations et Analyse', 
-            isRecsMissing, 
-            3
-        );
-    }
+        // 3. Faits & Bilan Accordion Item
+        const factsHTML = `
+            <div class="accordion-item mb-3 border rounded-3 overflow-hidden shadow-sm">
+                <h2 class="accordion-header" id="headingFacts">
+                    <button class="accordion-button collapsed py-3 d-flex justify-content-between align-items-center bg-white" type="button" data-bs-toggle="collapse" data-bs-target="#collapseFacts" aria-expanded="false" aria-controls="collapseFacts" style="box-shadow: none;">
+                        <div class="d-flex align-items-center w-100 me-3">
+                            <i class="fa-solid ${isFactsMissing ? 'fa-triangle-exclamation text-warning' : 'fa-circle-check text-success'} fs-5 me-3"></i>
+                            <div class="flex-grow-1 text-start">
+                                <span class="fw-semibold text-dark fs-6">Faits et Bilan</span>
+                                <span class="d-block text-secondary small mt-0.5">${incident ? `${incident} (${gravity || 'Moyenne'})` : 'Détails de l\'incident'}</span>
+                            </div>
+                            <span class="badge ${isFactsMissing ? 'bg-warning text-dark' : 'bg-success'} rounded-pill px-3 py-1.5 fs-7 ms-auto">${isFactsMissing ? 'Incomplet' : 'OK'}</span>
+                        </div>
+                    </button>
+                </h2>
+                <div id="collapseFacts" class="accordion-collapse collapse" aria-labelledby="headingFacts" data-bs-parent="#recapChecklist">
+                    <div class="accordion-body bg-light-subtle text-start p-4 border-top">
+                        <div class="row g-3 mb-3">
+                            <div class="col-sm-6"><strong>Type d\'incident :</strong> <span class="text-secondary">${incident || 'Non renseigné'}</span></div>
+                            <div class="col-sm-6"><strong>Niveau de gravité :</strong> <span class="text-secondary">${gravity || 'Moyenne'}</span></div>
+                            <div class="col-sm-6"><strong>Victimes directes :</strong> <span class="text-secondary">${victims}</span></div>
+                            <div class="col-sm-6"><strong>Ménages déplacés :</strong> <span class="text-secondary">${displaced}</span></div>
+                        </div>
+                        <div class="mb-3">
+                            <strong>Description des faits :</strong>
+                            <div class="p-3 bg-white border rounded mt-2 text-secondary" style="white-space: pre-wrap; font-size: 0.9rem;">${facts || 'Aucune description renseignée.'}</div>
+                        </div>
+                        <div class="mt-4 pt-3 border-top d-flex justify-content-end">
+                            <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3" onclick="if(typeof stepper !== 'undefined' && stepper) { stepper.to(2); }">
+                                <i class="fa-solid fa-pen-to-square me-1"></i> Modifier les faits
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
 
-    function createChecklistItem(title, isMissing, stepNumber) {
-        if (isMissing) {
-            return `
-            <div class="list-group-item d-flex justify-content-between align-items-center bg-warning-subtle border-warning text-warning-emphasis" style="border-radius: 12px; margin-bottom: 8px; border: 1.5px solid !important; padding: 14px 20px;">
-                <span class="text-start"><i class="fa-solid fa-triangle-exclamation text-warning me-2 fs-5"></i> <strong>${title}</strong> : <span class="badge bg-warning text-dark ms-1">Incomplet</span></span>
-                <button type="button" class="btn btn-sm btn-warning rounded-pill px-3 py-1.5 fw-semibold" onclick="if(typeof stepper !== 'undefined' && stepper) { stepper.to(${stepNumber}); }">Compléter <i class="fa-solid fa-arrow-right ms-1"></i></button>
-            </div>`;
-        } else {
-            return `
-            <div class="list-group-item d-flex justify-content-between align-items-center bg-success-subtle border-success text-success-emphasis" style="border-radius: 12px; margin-bottom: 8px; border: 1.5px solid !important; padding: 14px 20px;">
-                <span class="text-start"><i class="fa-solid fa-check text-success me-2 fs-5"></i> <strong>${title}</strong></span>
-                <span class="badge bg-success rounded-pill px-3 py-1.5 fs-7">OK</span>
-            </div>`;
-        }
+        // 4. Recommandations Accordion Item
+        const recsHTML = `
+            <div class="accordion-item mb-3 border rounded-3 overflow-hidden shadow-sm">
+                <h2 class="accordion-header" id="headingRecs">
+                    <button class="accordion-button collapsed py-3 d-flex justify-content-between align-items-center bg-white" type="button" data-bs-toggle="collapse" data-bs-target="#collapseRecs" aria-expanded="false" aria-controls="collapseRecs" style="box-shadow: none;">
+                        <div class="d-flex align-items-center w-100 me-3">
+                            <i class="fa-solid ${isRecsMissing ? 'fa-triangle-exclamation text-warning' : 'fa-circle-check text-success'} fs-5 me-3"></i>
+                            <div class="flex-grow-1 text-start">
+                                <span class="fw-semibold text-dark fs-6">Recommandations et Analyse</span>
+                                <span class="d-block text-secondary small mt-0.5">${recs ? recs.substring(0, 60) + '...' : 'Analyse et besoins identifiés'}</span>
+                            </div>
+                            <span class="badge ${isRecsMissing ? 'bg-warning text-dark' : 'bg-success'} rounded-pill px-3 py-1.5 fs-7 ms-auto">${isRecsMissing ? 'Incomplet' : 'OK'}</span>
+                        </div>
+                    </button>
+                </h2>
+                <div id="collapseRecs" class="accordion-collapse collapse" aria-labelledby="headingRecs" data-bs-parent="#recapChecklist">
+                    <div class="accordion-body bg-light-subtle text-start p-4 border-top">
+                        <div class="mb-3">
+                            <strong>Impacts humanitaires & Analyse :</strong>
+                            <div class="p-3 bg-white border rounded mt-2 text-secondary" style="white-space: pre-wrap; font-size: 0.9rem;">${analysis || 'Aucune analyse renseignée.'}</div>
+                        </div>
+                        <div class="mb-3">
+                            <strong>Besoins prioritaires :</strong>
+                            <div class="p-3 bg-white border rounded mt-2 text-secondary" style="white-space: pre-wrap; font-size: 0.9rem;">${needs || 'Aucun besoin prioritaire renseigné.'}</div>
+                        </div>
+                        <div class="mb-3">
+                            <strong>Recommandations opérationnelles :</strong>
+                            <div class="p-3 bg-white border rounded mt-2 text-secondary" style="white-space: pre-wrap; font-size: 0.9rem;">${recs || 'Aucune recommandation renseignée.'}</div>
+                        </div>
+                        <div class="mt-4 pt-3 border-top d-flex justify-content-end">
+                            <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3" onclick="if(typeof stepper !== 'undefined' && stepper) { stepper.to(3); }">
+                                <i class="fa-solid fa-pen-to-square me-1"></i> Modifier l'analyse & recs
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        recapContainer.innerHTML = locHTML + gpsHTML + factsHTML + recsHTML;
     }
 
     // ─────────────────────────────────────────────

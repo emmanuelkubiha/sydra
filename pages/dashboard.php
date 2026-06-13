@@ -19,7 +19,7 @@ $subtitle = $isDecisionRole
     ? 'Espace de coordination GTMP'
     : 'Votre espace de rapportage';
 
-$heroPrimaryHref = $isDecisionRole ? '?page=rapportage-admin-list' : '?page=rapportage-creer-wizar';
+$heroPrimaryHref = $isDecisionRole ? '?page=rapportage-admin-list' : '?page=rapportage-creer-AI';
 $heroPrimaryLabel = $isDecisionRole ? 'Gérer les alertes' : 'Nouvelle alerte';
 $heroPrimaryIcon = $isDecisionRole ? 'bi bi-kanban-fill' : 'bi bi-plus-circle-fill';
 $heroSecondaryHref = $isDecisionRole ? '?page=rapportage-liste-user' : '?page=rapportage';
@@ -487,7 +487,7 @@ $csrfTokenDashboard = htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8');
                     postDraftAction('check_user_draft_collision', {})
                         .then(function (data) {
                             if (!data || data.ok !== true || !data.has_draft || !data.draft) {
-                                window.location.href = link.getAttribute('href') || '?page=rapportage-creer-wizar';
+                                window.location.href = link.getAttribute('href') || '?page=rapportage-creer-AI';
                                 return;
                             }
 
@@ -535,7 +535,7 @@ $csrfTokenDashboard = htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8');
                                                 if (!deleteResult || deleteResult.ok !== true) {
                                                     throw new Error((deleteResult && deleteResult.message) ? deleteResult.message : 'Suppression impossible.');
                                                 }
-                                                window.location.href = link.getAttribute('href') || '?page=rapportage-creer-wizar';
+                                                window.location.href = link.getAttribute('href') || '?page=rapportage-creer-AI';
                                             })
                                             .catch(function (err) {
                                                 window.Swal.fire({
@@ -549,7 +549,7 @@ $csrfTokenDashboard = htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8');
                             });
                         })
                         .catch(function () {
-                            window.location.href = link.getAttribute('href') || '?page=rapportage-creer-wizar';
+                            window.location.href = link.getAttribute('href') || '?page=rapportage-creer-AI';
                         });
                 });
             });
