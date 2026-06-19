@@ -1221,6 +1221,25 @@ option[value="Critique"]{ color: #dc2626; }
             });
         }
 
+        // Interception Hors-Ligne (PWA Phase 2)
+        if (!navigator.onLine) {
+            var reportData = {};
+            for (var pair of payload.entries()) {
+                if (!(pair[1] instanceof File)) {
+                    reportData[pair[0]] = pair[1];
+                }
+            }
+            if (typeof saveReportOffline === 'function') {
+                saveReportOffline(reportData);
+            } else {
+                showAlert('warning', 'Hors-ligne', 'Aucune connexion Internet détectée et le gestionnaire hors-ligne est indisponible.');
+            }
+            setTimeout(function() {
+                window.location.href = '?page=rapportage-liste-user';
+            }, 2500);
+            return;
+        }
+
         var submitBtn = targetStatus === 'Brouillon'
             ? document.getElementById('btnSaveDraft')
             : document.getElementById('btnSubmitCluster');

@@ -196,6 +196,25 @@ $currentLang = function_exists('current_lang') ? current_lang() : ($lang ?? 'fr'
                 
                         <button class="btn btn-primary rounded-pill px-4 shadow-sm mt-2" type="submit">Changer le mot de passe</button>
                     </form>
+
+                    <hr class="my-4 text-muted opacity-25">
+                    
+                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+                        <div style="flex: 1; min-width: 250px;">
+                            <strong class="text-dark d-block small fw-bold">Vous avez oublié votre mot de passe actuel ?</strong>
+                            <span class="text-secondary small">Vous pouvez recevoir un lien de réinitialisation sécurisé par email pour le redéfinir sans saisir votre mot de passe actuel.</span>
+                            <?php if (isset($config['mail']['smtp_host']) && trim((string) $config['mail']['smtp_host']) === ''): ?>
+                                <div class="text-danger small mt-1"><i class="fa-solid fa-triangle-exclamation me-1"></i> SMTP non configuré : les emails de réinitialisation ne pourront pas être envoyés.</div>
+                            <?php endif; ?>
+                        </div>
+                        <form method="post" action="?page=profil" style="margin: 0;">
+                            <input type="hidden" name="action" value="request_password_reset_from_profile">
+                            <input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
+                            <button type="submit" class="btn btn-outline-primary rounded-pill px-4 btn-sm fw-semibold">
+                                <i class="fa-regular fa-envelope me-1"></i> Recevoir un lien
+                            </button>
+                        </form>
+                    </div>
                 </div>
                 
                 <!-- Préférences -->

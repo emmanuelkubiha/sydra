@@ -87,6 +87,55 @@ function columnExists(PDO $pdo, string $tableName, string $columnName): bool
 try {
     $pdo = db($config);
 
+    // --- SYSTEME DE CODIFICATION AUTOMATIQUE (Mission 1) ---
+    // 1. Récupérer toutes les règles de codification actives
+    $stmtRules = $pdo->query("SELECT term, replacement_code FROM codification_rules WHERE is_active = 1");
+    $rules = $stmtRules->fetchAll(PDO::FETCH_ASSOC);
+
+    // 2. Définir les champs à filtrer
+    $fieldsToCodify = ['facts_text', 'description', 'analysis_text', 'analyse', 'recommendations_text', 'recommandations'];
+    $codificationLogs = []; // Tableau pour stocker les modifications à logger plus tard
+
+    // 3. Appliquer le filtre (Recherche et Remplacement)
+    foreach ($fieldsToCodify as $field) {
+        if (isset($_POST[$field]) && !empty($_POST[$field])) {
+            $originalText = (string) $_POST[$field];
+            $codedText = $originalText;
+            $hasChanged = false;
+
+            foreach ($rules as $rule) {
+                // Créer une expression régulière sécurisée, insensible à la casse (i) 
+                // et qui cherche des mots entiers (\b) pour ne pas remplacer des syllabes au milieu d'un mot
+                $pattern = '/\b' . preg_quote($rule['term'], '/') . '\b/i';
+                
+                $newText = preg_replace($pattern, $rule['replacement_code'], $codedText);
+                
+                if ($newText !== $codedText) {
+                    $hasChanged = true;
+                    $codedText = $newText;
+                }
+            }
+
+            // Si le texte a été modifié, on met à jour la variable POST et on prépare le log
+            if ($hasChanged) {
+                $_POST[$field] = $codedText;
+                
+                // Normaliser le nom du champ pour le log final
+                $logFieldName = $field;
+                if ($field === 'description') $logFieldName = 'facts_text';
+                if ($field === 'analyse') $logFieldName = 'analysis_text';
+                if ($field === 'recommandations') $logFieldName = 'recommendations_text';
+                
+                $codificationLogs[] = [
+                    'field_name' => $logFieldName,
+                    'original_excerpt' => $originalText,
+                    'coded_excerpt' => $codedText
+                ];
+            }
+        }
+    }
+    // --------------------------------------------------------
+
     $province = trim((string) ($_POST['province'] ?? ''));
     $territory = trim((string) ($_POST['territory'] ?? ''));
     $healthZone = trim((string) ($_POST['health_zone'] ?? ''));
@@ -120,7 +169,13 @@ try {
         }
 
         if ($incidentType === '' || $factsText === '' || $analyse === '' || $recommandations === '') {
-            echo json_encode(['ok' => false, 'message' => 'Veuillez compléter les sections Faits et Analyse.']);
+            $missing = [];
+            if ($incidentType === '') $missing[] = 'Type d\'incident';
+            if ($factsText === '') $missing[] = 'Faits';
+            if ($analyse === '') $missing[] = 'Analyse';
+            if ($recommandations === '') $missing[] = 'Recommandations';
+            
+            echo json_encode(['ok' => false, 'message' => 'Veuillez compléter les sections suivantes : ' . implode(', ', $missing) . '.']);
             exit;
         }
     }
@@ -314,6 +369,20 @@ try {
         $stmt->execute();
         $reportId = (int) $pdo->lastInsertId();
     }
+
+    // --- ENREGISTREMENT DE LA TRACABILITE (Mission 2) ---
+    if (!empty($codificationLogs) && $reportId > 0) {
+        $stmtLog = $pdo->prepare("INSERT INTO codification_logs (report_id, field_name, original_excerpt, coded_excerpt) VALUES (?, ?, ?, ?)");
+        foreach ($codificationLogs as $log) {
+            $stmtLog->execute([
+                $reportId,
+                $log['field_name'],
+                $log['original_excerpt'],
+                $log['coded_excerpt']
+            ]);
+        }
+    }
+    // ----------------------------------------------------
 
     if (tableExists($pdo, 'report_status_history')) {
         $historyStmt = $pdo->prepare('INSERT INTO report_status_history (report_id, status_label, event_note, changed_by)

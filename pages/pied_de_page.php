@@ -11,6 +11,12 @@
 		</form>
 	</div>
 <?php endif; ?>
+		<!-- PWA Download Button in Footer -->
+		<?php if ((!isset($_SESSION['auth_user_id']) || (int) ($_SESSION['auth_user_id'] ?? 0) <= 0) && isset($page) && $page !== 'telecharger'): ?>
+			<div class="text-center mt-3 mb-3">
+				<a href="?page=telecharger" class="btn btn-outline-primary btn-sm rounded-pill mt-3 mb-3"><i class="fa-solid fa-mobile-screen-button me-2"></i> Télécharger l'Application SyDRA</a>
+			</div>
+		<?php endif; ?>
 		</div>
 	</main>
 </div>
@@ -40,7 +46,7 @@ $aiJsVersion = @filemtime(__DIR__ . '/../assets/js/ai_chat.js') ?: time();
 </div>
 
 <div class="offcanvas offcanvas-end sydra-ai-offcanvas" tabindex="-1" id="sydraAiOffcanvas" aria-labelledby="sydraAiOffcanvasLabel">
-	<!-- ═══ HEADER PREMIUM (Mission 1) ═══ -->
+	<!-- ═══ HEADER PREMIUM SAAS ═══ -->
 	<div class="sydra-ai-header">
 		<div class="sydra-ai-header-left">
 			<div class="sydra-ai-avatar-ring">
@@ -51,9 +57,14 @@ $aiJsVersion = @filemtime(__DIR__ . '/../assets/js/ai_chat.js') ?: time();
 				<span class="sydra-ai-status"><span class="sydra-ai-status-dot"></span>En ligne</span>
 			</div>
 		</div>
-		<button type="button" class="sydra-ai-close-btn" data-bs-dismiss="offcanvas" aria-label="Fermer">
-			<i class="bi bi-x-lg"></i>
-		</button>
+		<div class="sydra-ai-header-actions">
+			<button id="btnResetFloatingChat" class="sydra-ai-action-btn btn-danger-soft" data-bs-toggle="tooltip" title="Effacer la conversation">
+				<i class="fa-solid fa-trash-can"></i>
+			</button>
+			<button id="btnCloseFloatingChat" class="sydra-ai-action-btn btn-close-soft" data-bs-dismiss="offcanvas" aria-label="Fermer">
+				<i class="fa-solid fa-xmark"></i>
+			</button>
+		</div>
 	</div>
 
 	<!-- ═══ BODY ═══ -->
@@ -73,7 +84,7 @@ $aiJsVersion = @filemtime(__DIR__ . '/../assets/js/ai_chat.js') ?: time();
 		<!-- Mission 4 : Conteneur des Smart Chips (suggestions permanentes) -->
 		<div id="sydra-ai-suggestions" class="sydra-ai-suggestions-container"></div>
 		
-		<form id="sydra-ai-form" class="sydra-ai-form" novalidate>
+		<form id="sydra-ai-form" class="sydra-ai-form js-ai-chat-form" novalidate>
 			<div class="sydra-ai-input-wrapper">
 				<textarea
 					id="sydra-ai-input"
@@ -184,6 +195,7 @@ $aiJsVersion = @filemtime(__DIR__ . '/../assets/js/ai_chat.js') ?: time();
 	box-shadow: 0 10px 40px rgba(0,0,0,0.15), -2px 0 12px rgba(0,0,0,0.06) !important;
 	border-radius: 16px 0 0 16px !important;
 	overflow: hidden;
+	z-index: 1060 !important;
 }
 
 /* ═══ HEADER PREMIUM ═══ */
@@ -191,10 +203,11 @@ $aiJsVersion = @filemtime(__DIR__ . '/../assets/js/ai_chat.js') ?: time();
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	padding: 14px 18px;
+	padding: 16px 20px;
 	background: linear-gradient(135deg, #005bbb 0%, #0074e4 60%, #3a86ff 100%);
 	color: #ffffff;
-	min-height: 64px;
+	flex-shrink: 0;
+	border-bottom: 1px solid rgba(255,255,255,0.08);
 }
 .sydra-ai-header-left {
 	display: flex;
@@ -202,14 +215,15 @@ $aiJsVersion = @filemtime(__DIR__ . '/../assets/js/ai_chat.js') ?: time();
 	gap: 12px;
 }
 .sydra-ai-avatar-ring {
-	width: 40px;
-	height: 40px;
-	border-radius: 50%;
-	background: rgba(255,255,255,0.18);
+	width: 42px;
+	height: 42px;
+	border-radius: 12px;
+	background: rgba(255,255,255,0.15);
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	border: 2px solid rgba(255,255,255,0.30);
+	border: 1px solid rgba(255,255,255,0.25);
+	box-shadow: 0 4px 10px rgba(0, 91, 187, 0.3);
 }
 .sydra-ai-header-logo {
 	width: 24px;
@@ -220,45 +234,66 @@ $aiJsVersion = @filemtime(__DIR__ . '/../assets/js/ai_chat.js') ?: time();
 .sydra-ai-header-info {
 	display: flex;
 	flex-direction: column;
-	line-height: 1.3;
+	line-height: 1.25;
 }
 .sydra-ai-header-info strong {
-	font-size: 0.95rem;
+	font-size: 1.05rem;
 	font-weight: 700;
 	letter-spacing: 0.01em;
 }
 .sydra-ai-status {
-	font-size: 0.72rem;
-	opacity: 0.90;
+	font-size: 0.75rem;
+	color: #dbeafe;
 	display: flex;
 	align-items: center;
-	gap: 5px;
+	gap: 6px;
+	margin-top: 2px;
 }
 .sydra-ai-status-dot {
-	width: 7px;
-	height: 7px;
+	width: 8px;
+	height: 8px;
 	border-radius: 50%;
-	background: #34d399;
+	background: #10b981;
 	display: inline-block;
-	box-shadow: 0 0 5px rgba(52, 211, 153, 0.60);
+	box-shadow: 0 0 6px rgba(16, 185, 129, 0.60);
 	animation: sydraStatusPulse 2s ease-in-out infinite;
 }
-.sydra-ai-close-btn {
-	background: rgba(255,255,255,0.12);
-	border: 1px solid rgba(255,255,255,0.18);
+.sydra-ai-header-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.sydra-ai-action-btn {
+	width: 36px;
+	height: 36px;
 	border-radius: 10px;
-	color: #ffffff;
-	width: 34px;
-	height: 34px;
+	border: none;
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
+	font-size: 1rem;
 	cursor: pointer;
-	font-size: 0.9rem;
-	transition: background .15s ease;
+	transition: all 0.2s ease;
 }
-.sydra-ai-close-btn:hover {
-	background: rgba(255,255,255,0.22);
+.btn-danger-soft {
+	background: rgba(239, 68, 68, 0.15);
+	color: #fca5a5;
+	border: 1px solid rgba(239, 68, 68, 0.3);
+}
+.btn-danger-soft:hover {
+	background: rgba(239, 68, 68, 0.9);
+	color: #ffffff;
+	transform: translateY(-1px);
+}
+.btn-close-soft {
+	background: rgba(255, 255, 255, 0.12);
+	color: #e2e8f0;
+	border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.btn-close-soft:hover {
+	background: rgba(255, 255, 255, 0.25);
+	color: #ffffff;
+	transform: translateY(-1px);
 }
 
 /* ═══ BODY CONTAINER ═══ */
@@ -529,13 +564,36 @@ $aiJsVersion = @filemtime(__DIR__ . '/../assets/js/ai_chat.js') ?: time();
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/datatables.net@2.0.8/js/dataTables.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>
 <script src="assets/js/app.js?v=<?= (int) $jsVersion; ?>"></script>
+<?php $offlineJsVersion = @filemtime(__DIR__ . '/../assets/js/offline_manager.js') ?: time(); ?>
+<script src="assets/js/offline_manager.js?v=<?= (int) $offlineJsVersion; ?>"></script>
 <?php if (isset($_SESSION['auth_user_id']) && (int) ($_SESSION['auth_user_id'] ?? 0) > 0): ?>
+<!-- ════ SYDRA USER CONTEXT (Mission 1) ════ -->
+<script>
+	const sydraUser = {
+		name: "<?= !empty($_SESSION['full_name']) ? htmlspecialchars(trim($_SESSION['full_name']), ENT_QUOTES, 'UTF-8') : '' ?>",
+		role: "<?= isset($_SESSION['role_code']) ? htmlspecialchars($_SESSION['role_code'], ENT_QUOTES, 'UTF-8') : 'ORG_REPORTER' ?>",
+		org: "<?= isset($_SESSION['organization_name']) ? htmlspecialchars($_SESSION['organization_name'], ENT_QUOTES, 'UTF-8') : '' ?>"
+	};
+</script>
 <script src="assets/js/ai_chat.js?v=<?= (int) $aiJsVersion; ?>"></script>
 <?php endif; ?>
+<!-- Enregistrement du Service Worker PWA -->
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./service-worker.js').then(registration => {
+      console.log('ServiceWorker enregistré avec succès.');
+    }).catch(error => {
+      console.log('Erreur d\'enregistrement du ServiceWorker:', error);
+    });
+  });
+}
+</script>
 </body>
 </html>

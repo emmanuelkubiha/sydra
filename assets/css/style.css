@@ -2310,3 +2310,63 @@ html, body {
     max-width: 360px !important;
 }
 
+/* Design Premium pour Notifications (SweetAlert2) */
+.premium-toast {
+    border-radius: 16px !important;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.12) !important;
+    font-family: 'Inter', 'Poppins', sans-serif !important;
+    padding: 12px 20px !important;
+    color: #ffffff !important;
+    border: none !important;
+}
+.premium-toast-success { background-color: #10b981 !important; }
+.premium-toast-error { background-color: #ef4444 !important; }
+.premium-toast-title { color: #ffffff !important; font-size: 0.95rem !important; margin: 0 !important; }
+.premium-toast .swal2-icon { border: none !important; color: #ffffff !important; }
+.premium-toast .swal2-success-ring { border-color: rgba(255,255,255,0.4) !important; }
+.premium-toast .swal2-success-line-tip, .premium-toast .swal2-success-line-long,
+.premium-toast .swal2-x-mark-line-left, .premium-toast .swal2-x-mark-line-right { background-color: #ffffff !important; }
+
+/* Design Premium pour les Popups d'erreur centrales (ex: Accès interdit) */
+.premium-swal-popup {
+    border-radius: 20px !important;
+    padding: 2rem !important;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.15) !important;
+    font-family: 'Inter', 'Poppins', sans-serif !important;
+}
+.premium-swal-title {
+    font-weight: 700 !important;
+    color: #1e293b !important;
+}
+.premium-swal-btn {
+    border-radius: 10px !important;
+    font-weight: 600 !important;
+    padding: 10px 24px !important;
+    box-shadow: 0 4px 14px rgba(0, 91, 187, 0.3) !important;
+}
+
+/* Premium UI pour les Chips du Chatbot (Mission 2) */
+.chat-suggestion-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+.chat-suggestion-chip {
+    background-color: #f1f5f9;
+    color: #0d6efd;
+    border: 1px solid #cbd5e1;
+    border-radius: 20px;
+    padding: 6px 12px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-family: 'Inter', 'Poppins', sans-serif;
+}
+.chat-suggestion-chip:hover {
+    background-color: #e0e7ff;
+    border-color: #0d6efd;
+    transform: translateY(-1px);
+}
+
+

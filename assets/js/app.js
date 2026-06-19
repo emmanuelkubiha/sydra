@@ -307,14 +307,38 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function showToast(message, type) {
         if (window.Swal && typeof window.Swal.fire === 'function') {
+            var isAccessDenied = message.toLowerCase().indexOf('accès interdit') !== -1;
+            
+            if (isAccessDenied || message.length > 85) {
+                // Montrer un vrai popup central Premium
+                window.Swal.fire({
+                    icon: type === 'error' ? 'error' : 'info',
+                    title: type === 'error' ? 'Attention' : 'Information',
+                    text: message,
+                    confirmButtonText: 'Compris',
+                    confirmButtonColor: '#005bbb',
+                    background: '#ffffff',
+                    customClass: {
+                        popup: 'premium-swal-popup',
+                        title: 'premium-swal-title',
+                        confirmButton: 'premium-swal-btn'
+                    }
+                });
+                return;
+            }
+
             window.Swal.fire({
                 toast: true,
                 position: 'top-end',
-                timer: 3500,
+                timer: 4000,
                 timerProgressBar: true,
                 showConfirmButton: false,
                 icon: type === 'error' ? 'error' : 'success',
-                title: message
+                title: message,
+                customClass: {
+                    popup: 'premium-toast ' + (type === 'error' ? 'premium-toast-error' : 'premium-toast-success'),
+                    title: 'premium-toast-title'
+                }
             });
             return;
         }

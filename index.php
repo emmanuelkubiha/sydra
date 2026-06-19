@@ -971,7 +971,21 @@ if ($appEnv !== 'production') {
     ensure_demo_users($config);
 }
 
+$pdo = db($config);
 $authUser = auth_user($config);
+
+if (is_array($authUser)) {
+    $sessionRole = strtoupper((string) ($authUser['role'] ?? $authUser['role_code'] ?? ''));
+    if ($sessionRole === '') {
+        $roleId = (int) ($authUser['role_id'] ?? 0);
+        if ($roleId > 0) {
+            $roleLookup = $pdo->prepare('SELECT COALESCE(code, "") FROM roles WHERE id = :id LIMIT 1');
+            $roleLookup->execute(['id' => $roleId]);
+            $sessionRole = strtoupper((string) $roleLookup->fetchColumn());
+        }
+    }
+    $_SESSION['role_code'] = $sessionRole;
+}
 
 $pageAliases = [
     'login' => 'connexion',
@@ -1084,25 +1098,19 @@ if ($method === 'POST') {
 
         $appUrl = rtrim((string) $config['app_url'], '/');
         $resetLink = $appUrl . '/?page=reinitialiser_mot_de_passe&token=' . urlencode($token);
-        $supportEmail = (string) ($config['support_email'] ?? $config['mail']['from'] ?? 'it@fosip-drc.org');
 
-        $subject = 'Réinitialisation de votre mot de passe SyDRA';
-        $body = "Bonjour " . (string) ($user['full_name'] ?? 'utilisateur') . ",\n\n"
-            . "Nous avons reçu une demande de réinitialisation de mot de passe.\n"
-            . "Cliquez sur ce lien pour définir un nouveau mot de passe:\n"
-            . $resetLink . "\n\n"
-            . "Ce lien expire dans 1 heure.\n"
-            . "Si vous n'êtes pas à l'origine de cette demande, ignorez ce message.\n"
-            . "Si le problème persiste, contactez l'admin: " . $supportEmail . "\n\n"
-            . "Équipe SyDRA";
+        $mailResult = envoyerNotificationEmail('reinitialisation_mdp', (string) $user['email'], [
+            'nom' => (string) ($user['full_name'] ?? 'Utilisateur'),
+            'reset_url' => $resetLink,
+            'expires_in' => '1 heure'
+        ]);
 
-        $mailResult = sendAppMailDetailed($config, (string) $user['email'], $subject, $body);
         if ((bool) ($mailResult['success'] ?? false)) {
             $_SESSION['password_reset_recent'] = $email;
             set_flash('success', 'Un email de réinitialisation a été envoyé à ' . (string) $user['email'] . '.');
         } else {
             $detail = trim((string) ($mailResult['error'] ?? 'Échec inconnu.'));
-            set_flash('error', 'Échec d\'envoi de l\'email de réinitialisation: ' . $detail);
+            set_flash('error', 'Échec d\'envoi de l\'email de réinitialisation : ' . $detail);
         }
 
         header('Location: ?page=mot_de_passe_oublie');
@@ -1315,6 +1323,63 @@ if ($method === 'POST') {
         ]);
 
         set_flash('success', 'Mot de passe mis a jour avec succes.');
+        header('Location: ?page=profil');
+        exit;
+    }
+
+    if ($action === 'request_password_reset_from_profile') {
+        require_auth($authUser);
+
+        $email = strtolower(trim((string) ($authUser['email'] ?? '')));
+
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            set_flash('error', 'Votre adresse email est invalide.');
+            header('Location: ?page=profil');
+            exit;
+        }
+
+        $stmt = $pdo->prepare('SELECT id, full_name, email, is_active FROM users WHERE email = :email LIMIT 1');
+        $stmt->execute(['email' => $email]);
+        $user = $stmt->fetch();
+
+        if (!is_array($user) || (int) ($user['is_active'] ?? 0) !== 1) {
+            set_flash('error', 'Compte introuvable ou inactif.');
+            header('Location: ?page=profil');
+            exit;
+        }
+
+        $token = bin2hex(random_bytes(32));
+        $tokenHash = hash('sha256', $token);
+        $expiresAt = date('Y-m-d H:i:s', time() + 3600);
+
+        $cleanup = $pdo->prepare('DELETE FROM password_reset_requests WHERE user_id = :user_id AND used_at IS NULL');
+        $cleanup->execute(['user_id' => (int) $user['id']]);
+
+        $insertReset = $pdo->prepare('INSERT INTO password_reset_requests (user_id, email, token_hash, expires_at)
+                                      VALUES (:user_id, :email, :token_hash, :expires_at)');
+        $insertReset->execute([
+            'user_id' => (int) $user['id'],
+            'email' => (string) $user['email'],
+            'token_hash' => $tokenHash,
+            'expires_at' => $expiresAt,
+        ]);
+
+        $appUrl = rtrim((string) $config['app_url'], '/');
+        $resetLink = $appUrl . '/?page=reinitialiser_mot_de_passe&token=' . urlencode($token);
+
+        $mailResult = envoyerNotificationEmail('reinitialisation_mdp', (string) $user['email'], [
+            'nom' => (string) ($user['full_name'] ?? 'Utilisateur'),
+            'reset_url' => $resetLink,
+            'expires_in' => '1 heure'
+        ]);
+
+        if ((bool) ($mailResult['success'] ?? false)) {
+            set_flash('success', 'Un email de réinitialisation a été envoyé à ' . (string) $user['email'] . '.');
+        } else {
+            $detail = trim((string) ($mailResult['error'] ?? 'Échec inconnu.'));
+            set_flash('error', 'Échec d\'envoi de l\'email de réinitialisation : ' . $detail);
+        }
+
         header('Location: ?page=profil');
         exit;
     }
@@ -2584,7 +2649,7 @@ if ($page === 'deconnexion') {
     exit;
 }
 
-$publicPages = ['connexion', 'mot_de_passe_oublie', 'activation_compte', 'reinitialiser_mot_de_passe', 'confirmer_email'];
+$publicPages = ['connexion', 'mot_de_passe_oublie', 'activation_compte', 'reinitialiser_mot_de_passe', 'confirmer_email', 'telecharger'];
 
 if ($page === 'connexion' && is_array($authUser)) {
     header('Location: ?page=tableau_de_bord');
@@ -2602,6 +2667,24 @@ if (is_array($authUser)
     set_flash('error', 'Complétez le profil organisation (nom long, téléphone et bio) avant de continuer.');
     header('Location: ?page=profil&must_complete_profile=1');
     exit;
+}
+
+if (is_array($authUser) && in_array($page, ['rapportage-creer-wizar', 'rapportage-creer-AI'], true)) {
+    $currentUserRole = strtoupper((string) ($authUser['role'] ?? $authUser['role_code'] ?? ''));
+    if ($currentUserRole === '') {
+        $roleId = (int) ($authUser['role_id'] ?? 0);
+        if ($roleId > 0) {
+            $roleLookup = $pdo->prepare('SELECT COALESCE(code, "") FROM roles WHERE id = :id LIMIT 1');
+            $roleLookup->execute(['id' => $roleId]);
+            $currentUserRole = strtoupper((string) $roleLookup->fetchColumn());
+        }
+    }
+    $isValidationRole = in_array($currentUserRole, ['ADMIN', 'CLUSTER_LEADER', 'GTMP_LEAD', 'GTMP_COLEAD', 'CLUSTER_PROTECTION', 'LEAD_GTMP'], true);
+    if ($isValidationRole) {
+        set_flash('error', 'Accès interdit. En tant que coordinateur ou administrateur, vous devez vous connecter ou créer un compte de type "Rapporteur" pour pouvoir créer des alertes.');
+        header('Location: ?page=tableau_de_bord');
+        exit;
+    }
 }
 
 $pageMap = [
@@ -2624,6 +2707,7 @@ $pageMap = [
     'reinitialiser_mot_de_passe' => ['file' => __DIR__ . '/pages/reset_password.php', 'title' => 'Reinitialiser le mot de passe'],
     'confirmer_email' => ['file' => __DIR__ . '/pages/confirm_email_change.php', 'title' => 'Confirmer le changement email'],
     'aide' => ['file' => __DIR__ . '/pages/aide.php', 'title' => 'Centre d\'aide'],
+    'telecharger' => ['file' => __DIR__ . '/pages/telecharger.php', 'title' => 'Installer l\'Application'],
 ];
 
 if (!isset($pageMap[$page])) {
@@ -2648,6 +2732,15 @@ if ($page === 'parametres' && !can_access_settings_page($authUser)) {
     http_response_code(403);
     echo 'Accès interdit.';
     exit;
+}
+
+if ($page === 'codification') {
+    $userRole = strtoupper((string) ($_SESSION['role_code'] ?? ($authUser['role'] ?? $authUser['role_code'] ?? '')));
+    if (!in_array($userRole, ['ADMIN', 'GTMP_LEAD', 'LEAD_GTMP', 'GTMP_COLEAD'], true)) {
+        http_response_code(403);
+        echo 'Accès interdit.';
+        exit;
+    }
 }
 
 $reports = [];
@@ -3703,7 +3796,7 @@ if ($page === 'tableau_de_bord' && is_array($authUser)) {
         $dashboardKpis = [
             ['label' => 'Rapports ce mois', 'value' => (int) ($global['month_reports'] ?? 0), 'icon' => 'fa-calendar-days'],
             ['label' => 'En attente validation', 'value' => (int) ($global['pending_reports'] ?? 0), 'icon' => 'fa-hourglass-half'],
-            ['label' => 'Validés / publiés', 'value' => (int) ($global['approved_reports'] ?? 0), 'icon' => 'fa-badge-check'],
+            ['label' => 'Validés / publiés', 'value' => (int) ($global['approved_reports'] ?? 0), 'icon' => 'fa-circle-check'],
             ['label' => 'Générés par IA', 'value' => $aiPct . '%', 'icon' => 'fa-wand-magic-sparkles'],
         ];
     } else {
@@ -3731,7 +3824,7 @@ if ($page === 'tableau_de_bord' && is_array($authUser)) {
             $dashboardKpis = [
                 ['label' => 'Vos alertes ce mois', 'value' => (int) ($orgStats['month_reports'] ?? 0), 'icon' => 'fa-calendar-days'],
                 ['label' => 'En attente validation', 'value' => (int) ($orgStats['pending_reports'] ?? 0), 'icon' => 'fa-hourglass-half'],
-                ['label' => 'Validées / publiées', 'value' => (int) ($orgStats['approved_reports'] ?? 0), 'icon' => 'fa-badge-check'],
+                ['label' => 'Validées / publiées', 'value' => (int) ($orgStats['approved_reports'] ?? 0), 'icon' => 'fa-circle-check'],
                 ['label' => 'Générés par IA', 'value' => $aiPct . '%', 'icon' => 'fa-wand-magic-sparkles'],
             ];
         }

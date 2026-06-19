@@ -237,6 +237,7 @@ if ($selectedOrgId !== '' && ctype_digit($selectedOrgId) === false) {
                             setTimeout(type, 1000); // Initial delay
                         });
                     </script>
+                    <?php if (!$isLeadOrAdmin): ?>
                     <div class="d-flex flex-wrap gap-3 align-items-center">
                         <a href="?page=rapportage-creer-AI" class="btn btn-ai-premium btn-lg">
                             <span class="badge-recommended">RECOMMANDÉ</span>
@@ -246,6 +247,7 @@ if ($selectedOrgId !== '' && ctype_digit($selectedOrgId) === false) {
                             <i class="fa-solid fa-pen me-2"></i>Saisie manuelle (Wizard)
                         </a>
                     </div>
+                    <?php endif; ?>
                     <div class="mt-4 pt-3 border-top d-flex gap-2">
                         <a href="?page=rapportage-mes-alertes" class="btn btn-light btn-sm shadow-sm rounded-pill px-3">Gérer toutes les alertes</a>
 <?php if (isset($_SESSION['role_code']) && in_array($_SESSION['role_code'], ['ADMIN', 'GTMP_LEAD', 'GTMP_COLEAD', 'CLUSTER_LEADER', 'CLUSTER_PROTECTION'])): ?>

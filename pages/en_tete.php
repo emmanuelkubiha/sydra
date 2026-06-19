@@ -236,9 +236,12 @@ if ($isAuth) {
     <meta name="csrf-token" content="<?= htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
     <title><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8'); ?></title>
     <link rel="icon" type="image/png" href="assets/img/sydra-logo/BLEU-PRIMARY-SYDRA-LOGO.png">
-    <link rel="apple-touch-icon" href="assets/img/sydra-logo/BLEU-PRIMARY-SYDRA-LOGO.png">
+    <link rel="apple-touch-icon" href="assets/img/BLEU-PRIMARY-SYDRA-LOGO.png">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0d6efd">
     <?php $cssVersion = @filemtime(__DIR__ . '/../assets/css/style.css') ?: time(); ?>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
     <link rel="stylesheet" href="assets/css/style.css?v=<?= (int) $cssVersion; ?>">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
@@ -279,6 +282,16 @@ if ($isAuth) {
             } ?>
         </nav>
 
+        <!-- Carte d'installation PWA -->
+        <div class="sidebar-help-card shadow-sm rounded-4 mb-3">
+            <div class="sidebar-help-icon" aria-hidden="true"><i class="fa-solid fa-mobile-screen-button"></i></div>
+            <div class="sidebar-help-content">
+                <strong>SyDRA Mobile</strong>
+                <span>Installez SyDRA sur votre appareil.</span>
+                <a href="?page=telecharger" class="sidebar-help-link">Installer l'application</a>
+            </div>
+        </div>
+
         <div class="sidebar-help-card shadow-sm rounded-4">
             <div class="sidebar-help-icon" aria-hidden="true"><i class="fa-solid fa-life-ring"></i></div>
             <div class="sidebar-help-content">
@@ -310,7 +323,9 @@ if ($isAuth) {
             </div>
 
             <div class="topbar-right">
-
+                <div class="d-flex align-items-center me-3 mt-1" id="network-indicator">
+                    <!-- Rempli par offline_manager.js -->
+                </div>
 
                 <div class="notif-wrapper" id="notif-wrapper">
                     <button type="button" id="notif-toggle" class="notif-btn<?= $notifDisplayCount > 0 ? ' notif-btn-alert' : ''; ?>" aria-label="Notifications">
@@ -413,7 +428,7 @@ if ($isAuth) {
                             <?php endif; ?>
                         </div>
                         <a href="?page=profil"><i class="bi bi-person-circle"></i> Mon profil</a>
-                        <a href="?page=deconnexion" class="danger"><i class="bi bi-box-arrow-right"></i> Déconnexion</a>
+                        <a href="?page=deconnexion" class="danger" onclick="return confirm('Voulez-vous vraiment vous déconnecter ?');"><i class="bi bi-box-arrow-right"></i> Déconnexion</a>
                     </div>
                 </div>
             </div>

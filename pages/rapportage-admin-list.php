@@ -20,7 +20,7 @@ if (!isset($_SESSION['role_code']) || !in_array($_SESSION['role_code'], $adminRo
         </div>
     </div>
 <?php
-    exit;
+    return;
 }
 
 $statusClass = static function (string $status): string {

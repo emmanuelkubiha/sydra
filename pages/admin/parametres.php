@@ -10,6 +10,36 @@ $canSeeIaSystem = $isAdmin;
 $canSeeSecurity = $isAdmin || $isLead;
 $canSeeBusiness = $isAdmin || $isLead;
 $hasAnyTab = $canSeeIaSystem || $canSeeSecurity || $canSeeBusiness;
+
+$pdo = db($config);
+
+// Charger les règles de codification
+$codificationRules = [];
+if ($canSeeSecurity) {
+    try {
+        $rulesStmt = $pdo->query('SELECT * FROM codification_rules ORDER BY term ASC');
+        $codificationRules = $rulesStmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Exception $e) {
+        // Ignorer ou logguer
+    }
+}
+
+// Charger l'historique des logs d'interception
+$codificationLogs = [];
+if ($canSeeSecurity) {
+    try {
+        $logsStmt = $pdo->query('
+            SELECT l.*, r.reference_code, r.title 
+            FROM codification_logs l 
+            JOIN reports r ON l.report_id = r.id 
+            ORDER BY l.created_at DESC 
+            LIMIT 50
+        ');
+        $codificationLogs = $logsStmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Exception $e) {
+        // Si la table n'a pas encore de logs, on continue sans bloquer
+    }
+}
 ?>
 
 <div class="card border-0 shadow-sm rounded-4 p-3 p-lg-4 settings-shell">
@@ -199,42 +229,107 @@ $hasAnyTab = $canSeeIaSystem || $canSeeSecurity || $canSeeBusiness;
 
                 <?php if ($canSeeSecurity): ?>
                 <div class="tab-pane fade <?= $firstPane ? 'show active' : ''; ?>" id="pane-security" role="tabpanel" aria-labelledby="tab-security" tabindex="0">
-                    <div class="card border-0 shadow-sm rounded-4 settings-card">
+                    
+                    <!-- Dictionnaire des règles de codification -->
+                    <div class="card border-0 shadow-sm rounded-4 settings-card mb-4">
                         <div class="card-body p-4">
-                            <div class="d-flex align-items-center justify-content-between gap-2 mb-3">
+                            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
                                 <div class="d-flex align-items-center gap-2">
-                                    <i class="fa-solid fa-user-secret text-primary"></i>
-                                    <h2 class="h6 mb-0">Sécurité &amp; Codification</h2>
+                                    <i class="fa-solid fa-shield-halved text-primary"></i>
+                                    <h2 class="h6 mb-0 fw-bold">Dictionnaire de codification</h2>
                                 </div>
-                                <button type="button" class="btn btn-primary btn-sm" id="btn-add-codification">
-                                    <i class="fa-solid fa-plus me-1"></i>Ajouter une règle
+                                <button type="button" class="btn btn-sydra-primary rounded-pill px-4 btn-sm" data-bs-toggle="modal" data-bs-target="#addRuleModal">
+                                    <i class="fa-solid fa-plus me-1"></i> Ajouter une règle
                                 </button>
                             </div>
                             <p class="text-muted small mb-3">
-                                Ces règles remplacent automatiquement les termes sensibles par des codes avant l'envoi à l'IA.
-                                <strong>Exemple :</strong> "Groupe M23" → <code>GA001</code>
+                                Les termes sensibles définis ci-dessous sont automatiquement interceptés et anonymisés à la volée avant écriture en base de données.
                             </p>
 
                             <div class="table-responsive">
-                                <table class="table align-middle table-hover table-sm w-100" id="codification-rules-table">
+                                <table class="table table-hover align-middle w-100" id="rules-table">
                                     <thead class="table-light">
                                         <tr>
                                             <th>Terme sensible</th>
                                             <th>Code de remplacement</th>
-                                            <th class="text-end" style="min-width:160px">Actions</th>
+                                            <th>Statut</th>
+                                            <th class="text-end" style="min-width:110px">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <tr>
-                                            <td colspan="3" class="text-center text-muted py-3">
-                                                <i class="fa-solid fa-spinner fa-spin me-1"></i>Chargement des règles...
-                                            </td>
-                                        </tr>
+                                        <?php foreach ($codificationRules as $rule): ?>
+                                            <tr>
+                                                <td><strong class="text-danger"><?= htmlspecialchars($rule['term'], ENT_QUOTES, 'UTF-8'); ?></strong></td>
+                                                <td><span class="badge bg-secondary px-2.5 py-1.5 rounded-3"><?= htmlspecialchars($rule['replacement_code'], ENT_QUOTES, 'UTF-8'); ?></span></td>
+                                                <td>
+                                                    <?php if ((int)$rule['is_active'] === 1): ?>
+                                                        <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2.5">Actif</span>
+                                                    <?php else: ?>
+                                                        <span class="badge bg-light text-muted border rounded-pill px-2.5">Inactif</span>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td class="text-end">
+                                                    <button type="button" class="btn btn-outline-sydra-primary btn-sm rounded-3 px-2.5 py-1 me-1 js-edit-rule-btn" 
+                                                            data-id="<?= (int)$rule['id']; ?>" 
+                                                            data-term="<?= htmlspecialchars($rule['term'], ENT_QUOTES, 'UTF-8'); ?>" 
+                                                            data-code="<?= htmlspecialchars($rule['replacement_code'], ENT_QUOTES, 'UTF-8'); ?>"
+                                                            data-active="<?= (int)$rule['is_active']; ?>"
+                                                            title="Modifier la règle">
+                                                        <i class="fa-solid fa-pencil me-1"></i> Modifier
+                                                    </button>
+                                                    <button type="button" class="btn btn-outline-danger btn-sm rounded-3 px-2.5 py-1 js-delete-rule-btn" 
+                                                            data-id="<?= (int)$rule['id']; ?>" 
+                                                            data-term="<?= htmlspecialchars($rule['term'], ENT_QUOTES, 'UTF-8'); ?>"
+                                                            title="Supprimer la règle">
+                                                        <i class="fa-solid fa-trash-can me-1"></i> Supprimer
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
                                     </tbody>
                                 </table>
                             </div>
                         </div>
                     </div>
+
+                    <!-- Audits Logs d'interception -->
+                    <div class="card border-0 shadow-sm rounded-4 settings-card">
+                        <div class="card-body p-4">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <i class="fa-solid fa-clock-rotate-left text-primary"></i>
+                                <h2 class="h6 mb-0 fw-bold">Interceptions récentes (Audit logs)</h2>
+                            </div>
+                            <p class="text-muted small mb-3">Historique des modifications apportées aux rapports avant leur stockage permanent.</p>
+
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle table-sm w-100" id="logs-table">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Réf</th>
+                                            <th>Rubrique</th>
+                                            <th>Original</th>
+                                            <th>Codifié</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($codificationLogs as $log): ?>
+                                            <tr>
+                                                <td>
+                                                    <a href="?page=rapportage-details&id=<?= (int)$log['report_id']; ?>" class="fw-semibold small">
+                                                        <?= htmlspecialchars($log['reference_code'], ENT_QUOTES, 'UTF-8'); ?>
+                                                    </a>
+                                                </td>
+                                                <td><code class="small text-primary" style="font-size: 0.72rem;"><?= htmlspecialchars($log['field_name'], ENT_QUOTES, 'UTF-8'); ?></code></td>
+                                                <td><div class="text-truncate" style="max-width: 150px;" title="<?= htmlspecialchars($log['original_excerpt'], ENT_QUOTES, 'UTF-8'); ?>"><?= htmlspecialchars($log['original_excerpt'], ENT_QUOTES, 'UTF-8'); ?></div></td>
+                                                <td><div class="text-truncate" style="max-width: 150px;" title="<?= htmlspecialchars($log['coded_excerpt'], ENT_QUOTES, 'UTF-8'); ?>"><?= htmlspecialchars($log['coded_excerpt'], ENT_QUOTES, 'UTF-8'); ?></div></td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
                 <?php $firstPane = false; ?>
                 <?php endif; ?>
@@ -268,7 +363,158 @@ $hasAnyTab = $canSeeIaSystem || $canSeeSecurity || $canSeeBusiness;
     <?php endif; ?>
 </div>
 
+<!-- Modal Bootstrap 5 pour l'ajout de règle -->
+<div class="modal fade" id="addRuleModal" tabindex="-1" aria-labelledby="addRuleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow rounded-4">
+            <div class="modal-header border-0 pb-0 pt-4 px-4">
+                <h5 class="modal-title fw-bold text-dark" id="addRuleModalLabel">
+                    <i class="fa-solid fa-shield-halved text-primary me-2"></i>Ajouter une règle de codification
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+            </div>
+            <form id="addRuleForm" novalidate>
+                <div class="modal-body px-4 py-3">
+                    <p class="text-muted small">Les termes correspondants insensibles à la casse seront anonymisés.</p>
+                    
+                    <div id="modalAlert" class="alert alert-danger border-0 rounded-3 small py-2 px-3 mb-3 d-none">
+                        <i class="fa-solid fa-triangle-exclamation me-2"></i><span id="modalAlertText"></span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="modal-term" class="form-label small fw-semibold">Terme sensible (ex: FARDC, Wazalendo)*</label>
+                        <input type="text" class="form-control rounded-3" name="term" id="modal-term" required placeholder="Entrez le mot à anonymiser...">
+                        <div class="invalid-feedback">Veuillez spécifier le terme sensible.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="modal-code" class="form-label small fw-semibold">Code de remplacement (ex: GA003, GA002)*</label>
+                        <input type="text" class="form-control rounded-3" name="replacement_code" id="modal-code" required placeholder="Entrez le code de substitution...">
+                        <div class="invalid-feedback">Veuillez spécifier le code de remplacement.</div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 px-4 pb-4 pt-1">
+                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-sydra-primary rounded-pill px-4" id="btnSubmitRule">
+                        <i class="fa-solid fa-check me-1"></i>Enregistrer la règle
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Bootstrap 5 pour la modification de règle -->
+<div class="modal fade" id="editRuleModal" tabindex="-1" aria-labelledby="editRuleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow rounded-4">
+            <div class="modal-header border-0 pb-0 pt-4 px-4">
+                <h5 class="modal-title fw-bold text-dark" id="editRuleModalLabel">
+                    <i class="fa-solid fa-pencil text-primary me-2"></i>Modifier la règle de codification
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+            </div>
+            <form id="editRuleForm" novalidate>
+                <input type="hidden" name="id" id="edit-rule-id">
+                <div class="modal-body px-4 py-3">
+                    <p class="text-muted small">Modifiez le terme sensible ou son code de substitution.</p>
+                    
+                    <div id="editModalAlert" class="alert alert-danger border-0 rounded-3 small py-2 px-3 mb-3 d-none">
+                        <i class="fa-solid fa-triangle-exclamation me-2"></i><span id="editModalAlertText"></span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="edit-term" class="form-label small fw-semibold">Terme sensible (ex: FARDC, Wazalendo)*</label>
+                        <input type="text" class="form-control rounded-3" name="term" id="edit-term" required placeholder="Entrez le mot à anonymiser...">
+                        <div class="invalid-feedback">Veuillez spécifier le terme sensible.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="edit-code" class="form-label small fw-semibold">Code de remplacement (ex: GA003, GA002)*</label>
+                        <input type="text" class="form-control rounded-3" name="replacement_code" id="edit-code" required placeholder="Entrez le code de substitution...">
+                        <div class="invalid-feedback">Veuillez spécifier le code de remplacement.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="edit-active" class="form-label small fw-semibold">Statut*</label>
+                        <select class="form-select rounded-3" name="is_active" id="edit-active" required>
+                            <option value="1">Actif</option>
+                            <option value="0">Inactif</option>
+                        </select>
+                        <div class="invalid-feedback">Veuillez spécifier le statut de la règle.</div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 px-4 pb-4 pt-1">
+                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-sydra-primary rounded-pill px-4" id="btnSubmitEditRule">
+                        <i class="fa-solid fa-check me-1"></i>Enregistrer les modifications
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Bootstrap 5 pour la suppression de règle -->
+<div class="modal fade" id="deleteRuleModal" tabindex="-1" aria-labelledby="deleteRuleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow rounded-4">
+            <div class="modal-header border-0 pb-0 pt-4 px-4">
+                <h5 class="modal-title fw-bold text-dark" id="deleteRuleModalLabel">
+                    <i class="fa-solid fa-triangle-exclamation text-danger me-2"></i>Confirmer la suppression
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+            </div>
+            <div class="modal-body px-4 py-3">
+                <div class="alert alert-warning border-0 rounded-3 small mb-3">
+                    <h6 class="fw-bold mb-1"><i class="fa-solid fa-circle-exclamation me-1"></i>Attention : Action irréversible</h6>
+                    <p class="mb-0">Vous êtes sur le point de supprimer la règle de codification pour le terme : <strong id="delete-rule-term" class="text-danger"></strong>.</p>
+                </div>
+                
+                <div id="deleteModalAlert" class="alert alert-danger border-0 rounded-3 small py-2 px-3 mb-3 d-none">
+                    <i class="fa-solid fa-triangle-exclamation me-2"></i><span id="deleteModalAlertText"></span>
+                </div>
+
+                <div class="small text-muted mb-3">
+                    <p class="mb-2"><strong>Ce que cela implique :</strong></p>
+                    <ul class="ps-3 mb-0">
+                        <li class="mb-1"><strong>Non-rétroactivité :</strong> Les rapports existants déjà codifiés avec cette règle restent anonymisés. Leurs données ne seront pas rétablies.</li>
+                        <li class="mb-1"><strong>Nouvelles données :</strong> Les futurs rapports soumis contenant ce terme ne seront plus interceptés ni masqués par cette règle.</li>
+                        <li><strong>Synchronisation PWA Hors-Ligne :</strong> Les terminaux mobiles utilisant le mode hors-ligne doivent actualiser leur cache (connexion requise) pour appliquer ce retrait lors des saisies.</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="modal-footer border-0 px-4 pb-4 pt-1">
+                <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-danger rounded-pill px-4" id="btnConfirmDeleteRule">
+                    <i class="fa-solid fa-trash-can me-1"></i>Supprimer définitivement
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <style>
+.btn-sydra-primary {
+    background-color: #005bbb !important;
+    border-color: #005bbb !important;
+    color: #ffffff !important;
+}
+.btn-sydra-primary:hover, .btn-sydra-primary:focus, .btn-sydra-primary:active {
+    background-color: #004799 !important;
+    border-color: #004799 !important;
+    color: #ffffff !important;
+}
+.btn-outline-sydra-primary {
+    color: #005bbb !important;
+    border-color: #005bbb !important;
+    background-color: transparent !important;
+}
+.btn-outline-sydra-primary:hover, .btn-outline-sydra-primary:focus, .btn-outline-sydra-primary:active {
+    background-color: #005bbb !important;
+    border-color: #005bbb !important;
+    color: #ffffff !important;
+}
 .settings-shell {
     border: 1px solid #dbeafe;
 }
@@ -341,25 +587,201 @@ $hasAnyTab = $canSeeIaSystem || $canSeeSecurity || $canSeeBusiness;
     color: #005BBB;
 }
 /* ── Codification DataTable ───────────────────────── */
-#codification-rules-table_wrapper .dataTables_filter input {
+/* Layout et alignement des contrôles */
+#rules-table_wrapper,
+#logs-table_wrapper {
+    position: relative;
+    clear: both;
+}
+
+#rules-table_wrapper::after,
+#logs-table_wrapper::after {
+    content: "";
+    display: table;
+    clear: both;
+}
+
+#rules-table_wrapper .dataTables_length,
+#rules-table_wrapper .dt-length,
+#logs-table_wrapper .dataTables_length,
+#logs-table_wrapper .dt-length {
+    float: left;
+    margin-bottom: 1rem;
+    display: inline-flex;
+    align-items: center;
+}
+
+#rules-table_wrapper .dataTables_filter,
+#rules-table_wrapper .dt-search,
+#logs-table_wrapper .dataTables_filter,
+#logs-table_wrapper .dt-search {
+    float: right;
+    margin-bottom: 1rem;
+    display: inline-flex;
+    align-items: center;
+}
+
+/* Style du champ de recherche */
+#rules-table_wrapper .dataTables_filter label,
+#rules-table_wrapper .dt-search label,
+#logs-table_wrapper .dataTables_filter label,
+#logs-table_wrapper .dt-search label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-size: 0.85rem;
+    color: #475569;
+    font-weight: 500;
+}
+
+#rules-table_wrapper .dataTables_filter input,
+#rules-table_wrapper .dt-search input,
+#logs-table_wrapper .dataTables_filter input,
+#logs-table_wrapper .dt-search input {
+    border-radius: 30px;
+    border: 1.5px solid #d1d5db;
+    padding: 7px 14px 7px 38px;
+    font-size: 0.85rem;
+    outline: none;
+    transition: all 0.25s ease-in-out;
+    background-color: #f8fafc;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: 14px center;
+    background-size: 16px 16px;
+    width: 240px;
+    color: #1e293b;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+#rules-table_wrapper .dataTables_filter input:focus,
+#rules-table_wrapper .dt-search input:focus,
+#logs-table_wrapper .dataTables_filter input:focus,
+#logs-table_wrapper .dt-search input:focus {
+    border-color: #005bbb;
+    background-color: #ffffff;
+    box-shadow: 0 0 0 3px rgba(0, 91, 187, 0.15);
+    width: 290px;
+}
+
+/* Style du select de longueur (page length) */
+#rules-table_wrapper .dataTables_length label,
+#rules-table_wrapper .dt-length label,
+#logs-table_wrapper .dataTables_length label,
+#logs-table_wrapper .dt-length label {
+    display: inline-flex;
+    align-items: center;
+    margin: 0;
+    font-size: 0.85rem;
+    color: #475569;
+    font-weight: 500;
+}
+
+#rules-table_wrapper .dataTables_length select,
+#rules-table_wrapper .dt-length select,
+#logs-table_wrapper .dataTables_length select,
+#logs-table_wrapper .dt-length select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 12px 12px;
+    padding: 6px 28px 6px 12px;
     border-radius: 8px;
-    border: 1.5px solid #e2e8f0;
-    padding: 4px 10px;
-    font-size: .85rem;
+    border: 1.5px solid #d1d5db;
+    font-size: 0.85rem;
+    outline: none;
+    background-color: #f8fafc;
+    transition: all 0.2s ease-in-out;
+    cursor: pointer;
+    color: #1e293b;
+    margin: 0 8px;
+    min-width: 65px;
 }
-#codification-rules-table td, #codification-rules-table th {
+
+#rules-table_wrapper .dataTables_length select:focus,
+#rules-table_wrapper .dt-length select:focus,
+#logs-table_wrapper .dataTables_length select:focus,
+#logs-table_wrapper .dt-length select:focus {
+    border-color: #005bbb;
+    background-color: #ffffff;
+    box-shadow: 0 0 0 3px rgba(0, 91, 187, 0.15);
+}
+
+/* Harmonisation des tables et de la pagination */
+#rules-table td, #rules-table th,
+#logs-table td, #logs-table th {
     vertical-align: middle;
-    font-size: .85rem;
+    font-size: 0.85rem;
+    padding: 10px 12px;
 }
-.codif-action-btn {
-    padding: 3px 9px;
-    font-size: .78rem;
-    border-radius: 7px;
+
+/* Alignement du footer (info & pagination) */
+#rules-table_wrapper .dataTables_info,
+#rules-table_wrapper .dt-info,
+#logs-table_wrapper .dataTables_info,
+#logs-table_wrapper .dt-info {
+    float: left;
+    margin-top: 1rem;
+    font-size: 0.8rem;
+    color: #64748b;
+}
+
+#rules-table_wrapper .dataTables_paginate,
+#rules-table_wrapper .dt-paging,
+#logs-table_wrapper .dataTables_paginate,
+#logs-table_wrapper .dt-paging {
+    float: right;
+    margin-top: 1rem;
+}
+
+/* Pagination modernisée */
+.dt-paging, .dataTables_paginate {
+    display: inline-flex;
+    gap: 4px;
+}
+
+.dt-paging .dt-paging-button,
+.dataTables_paginate .paginate_button {
+    border-radius: 8px !important;
+    border: 1px solid #d1d5db !important;
+    padding: 6px 12px !important;
+    font-size: 0.8rem !important;
+    background: #ffffff !important;
+    color: #475569 !important;
+    transition: all 0.15s ease !important;
+    cursor: pointer !important;
+}
+
+.dt-paging .dt-paging-button:hover,
+.dataTables_paginate .paginate_button:hover {
+    background: #f1f5f9 !important;
+    color: #0f172a !important;
+    border-color: #cbd5e1 !important;
+}
+
+.dt-paging .dt-paging-button.current,
+.dt-paging .dt-paging-button.active,
+.dataTables_paginate .paginate_button.current {
+    background: #005bbb !important;
+    color: #ffffff !important;
+    border-color: #005bbb !important;
+}
+
+.dt-paging .dt-paging-button.disabled,
+.dataTables_paginate .paginate_button.disabled {
+    background: #f8fafc !important;
+    color: #cbd5e1 !important;
+    border-color: #e2e8f0 !important;
+    cursor: not-allowed !important;
 }
 </style>
 
 <script>
-(function () {
+document.addEventListener('DOMContentLoaded', () => {
     'use strict';
 
     var pageAccess = {
@@ -374,10 +796,8 @@ $hasAnyTab = $canSeeIaSystem || $canSeeSecurity || $canSeeBusiness;
     }
 
     var apiUrl     = 'api/save_settings.php';
-    var codifUrl   = 'api/codification_handler.php';
     var csrfMeta   = document.querySelector('meta[name="csrf-token"]');
     var csrfToken  = csrfMeta ? String(csrfMeta.getAttribute('content') || '') : '';
-    var codifTable = null; // Référence à l'instance DataTables
 
     // ── Toast Swal2 ────────────────────────────────────────────────────────
     function showToast(icon, title) {
@@ -403,7 +823,7 @@ $hasAnyTab = $canSeeIaSystem || $canSeeSecurity || $canSeeBusiness;
         }).then(function (r) { return r.json(); });
     }
 
-    // ── Mission 5 : Radio Cards Provider — sélection & AJAX immédiat ──────
+    // ── Radio Cards Provider ────────────────────────────────────────────────
     function activateProviderCard(value) {
         document.querySelectorAll('.provider-card').forEach(function (card) {
             card.classList.remove('is-active');
@@ -472,198 +892,276 @@ $hasAnyTab = $canSeeIaSystem || $canSeeSecurity || $canSeeBusiness;
                         reviewInput.value = String(settings.review_deadline_days);
                     }
                 }
-
-                if (pageAccess.canSecurity) {
-                    loadCodificationTable();
-                }
             })
             .catch(function (error) {
                 showToast('error', error.message || 'Erreur de chargement des paramètres.');
             });
     }
 
-    // ── Mission 6 : CRUD Codification avec DataTables ─────────────────────
-
-    function loadCodificationTable() {
-        callApi(codifUrl, { action: 'list' })
-            .then(function (data) {
-                if (!data || data.ok !== true) { throw new Error(data.message || 'Chargement impossible.'); }
-                renderCodificationDataTable(data.rules || []);
-            })
-            .catch(function (err) {
-                showToast('error', err.message || 'Erreur chargement codification.');
-            });
+    // ── Initialisation des tables de codification ─────────────────────────
+    if (pageAccess.canSecurity && window.$ && $.fn.DataTable) {
+        $('#rules-table').DataTable({
+            language: {
+                emptyTable: "Aucune règle disponible dans le dictionnaire",
+                info: "Affichage de la règle _START_ à _END_ sur _TOTAL_ règles",
+                infoEmpty: "Affichage de 0 à 0 sur 0 règle",
+                infoFiltered: "(filtré à partir de _MAX_ règles au total)",
+                lengthMenu: "Afficher _MENU_ règles",
+                search: "",
+                searchPlaceholder: "Rechercher une règle...",
+                zeroRecords: "Aucune règle correspondante trouvée",
+                paginate: {
+                    first: "Premier",
+                    last: "Dernier",
+                    next: "Suivant",
+                    previous: "Précédent"
+                }
+            },
+            order: [[0, 'asc']],
+            pageLength: 10,
+            lengthMenu: [10, 25, 50]
+        });
+        $('#logs-table').DataTable({
+            language: {
+                emptyTable: "Aucune interception récente dans l'audit",
+                info: "Affichage du log _START_ à _END_ sur _TOTAL_ logs",
+                infoEmpty: "Affichage de 0 à 0 sur 0 log",
+                infoFiltered: "(filtré à partir de _MAX_ logs au total)",
+                lengthMenu: "Afficher _MENU_ logs",
+                search: "",
+                searchPlaceholder: "Rechercher un log...",
+                zeroRecords: "Aucune interception correspondante trouvée",
+                paginate: {
+                    first: "Premier",
+                    last: "Dernier",
+                    next: "Suivant",
+                    previous: "Précédent"
+                }
+            },
+            order: [[0, 'desc']],
+            pageLength: 5,
+            searching: true,
+            lengthChange: false
+        });
     }
 
-    function renderCodificationDataTable(rules) {
-        var tableEl = document.getElementById('codification-rules-table');
-        if (!tableEl) { return; }
+    // --- GESTION DE L'AJOUT ---
+    const addForm = document.getElementById('addRuleForm');
+    const addModalEl = document.getElementById('addRuleModal');
+    const addSubmitBtn = document.getElementById('btnSubmitRule');
+    const addAlert = document.getElementById('modalAlert');
+    const addAlertText = document.getElementById('modalAlertText');
 
-        // Détruire l'ancienne instance DataTables si elle existe
-        if (codifTable) {
-            codifTable.destroy();
-            codifTable = null;
-        }
+    if (addForm) {
+        addForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            if (!addForm.checkValidity()) {
+                addForm.classList.add('was-validated');
+                return;
+            }
 
-        var tbody = tableEl.querySelector('tbody');
-        if (!tbody) { return; }
-        tbody.innerHTML = '';
+            addSubmitBtn.disabled = true;
+            addSubmitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>Enregistrement...';
+            addAlert.classList.add('d-none');
 
-        if (rules.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">Aucune règle de codification enregistrée.</td></tr>';
-            return;
-        }
+            const termVal = document.getElementById('modal-term').value.trim();
+            const codeVal = document.getElementById('modal-code').value.trim();
 
-        rules.forEach(function (rule) {
-            var id   = rule.id ? String(rule.id) : '';
-            var term = String(rule.sensitive_term    || '').replace(/</g, '&lt;');
-            var code = String(rule.replacement_code  || '').replace(/</g, '&lt;');
-            var tr = document.createElement('tr');
-            tr.innerHTML =
-                '<td><strong>' + term + '</strong></td>' +
-                '<td><code class="text-primary">' + code + '</code></td>' +
-                '<td class="text-end">' +
-                    '<button class="btn btn-outline-primary btn-sm codif-action-btn me-1" ' +
-                        'data-action="edit" data-id="' + id + '" data-term="' + term + '" data-code="' + code + '">' +
-                        '<i class="fa-solid fa-pen me-1"></i>Modifier' +
-                    '</button>' +
-                    '<button class="btn btn-outline-danger btn-sm codif-action-btn" ' +
-                        'data-action="delete" data-id="' + id + '" data-term="' + term + '">' +
-                        '<i class="fa-solid fa-trash me-1"></i>Suppr.' +
-                    '</button>' +
-                '</td>';
-            tbody.appendChild(tr);
-        });
-
-        // Init DataTables (jQuery disponible via pied_de_page.php)
-        if (window.$ && $.fn.DataTable) {
-            codifTable = $(tableEl).DataTable({
-                language: {
-                    url: 'https://cdn.datatables.net/plug-ins/2.0.8/i18n/fr-FR.json'
+            $.ajax({
+                url: 'api/add_codification_rule.php',
+                type: 'POST',
+                data: {
+                    term: termVal,
+                    replacement_code: codeVal,
+                    csrf: csrfToken
                 },
-                pageLength: 10,
-                order: [[0, 'asc']],
-                columnDefs: [{ orderable: false, targets: 2 }]
+                dataType: 'json',
+                success: function (res) {
+                    addSubmitBtn.disabled = false;
+                    addSubmitBtn.innerHTML = '<i class="fa-solid fa-check me-1"></i>Enregistrer la règle';
+
+                    if (res && res.success === true) {
+                        if (typeof toastr !== 'undefined') {
+                            toastr.success(res.message || 'Règle ajoutée avec succès.');
+                        }
+                        
+                        if (window.bootstrap && window.bootstrap.Modal) {
+                            const modal = window.bootstrap.Modal.getInstance(addModalEl) || new window.bootstrap.Modal(addModalEl);
+                            modal.hide();
+                        }
+                        
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1000);
+                    } else {
+                        addAlertText.textContent = res.message || 'Une erreur est survenue.';
+                        addAlert.classList.remove('d-none');
+                    }
+                },
+                error: function (xhr, status, error) {
+                    addSubmitBtn.disabled = false;
+                    addSubmitBtn.innerHTML = '<i class="fa-solid fa-check me-1"></i>Enregistrer la règle';
+                    addAlertText.textContent = 'Erreur réseau : ' + error;
+                    addAlert.classList.remove('d-none');
+                }
             });
+        });
+    }
+
+    // --- GESTION DE LA MODIFICATION ---
+    const editForm = document.getElementById('editRuleForm');
+    const editModalEl = document.getElementById('editRuleModal');
+    const editSubmitBtn = document.getElementById('btnSubmitEditRule');
+    const editAlert = document.getElementById('editModalAlert');
+    const editAlertText = document.getElementById('editModalAlertText');
+
+    // Délégation d'événement pour le bouton de modification (compatible DataTables)
+    $('#rules-table').on('click', '.js-edit-rule-btn', function () {
+        const id = $(this).data('id');
+        const term = $(this).data('term');
+        const code = $(this).data('code');
+        const active = $(this).data('active');
+
+        document.getElementById('edit-rule-id').value = id;
+        document.getElementById('edit-term').value = term;
+        document.getElementById('edit-code').value = code;
+        document.getElementById('edit-active').value = active;
+
+        editAlert.classList.add('d-none');
+        editForm.classList.remove('was-validated');
+
+        if (window.bootstrap && window.bootstrap.Modal) {
+            const modal = window.bootstrap.Modal.getInstance(editModalEl) || new window.bootstrap.Modal(editModalEl);
+            modal.show();
         }
+    });
 
-        // Délégation d'événements sur les boutons (fonctionne même avec DataTables paginé)
-        tableEl.addEventListener('click', function (e) {
-            var btn = e.target.closest('[data-action]');
-            if (!btn) { return; }
-            var action = btn.getAttribute('data-action');
-            var id     = btn.getAttribute('data-id');
-            var term   = btn.getAttribute('data-term');
-            var code   = btn.getAttribute('data-code');
-
-            if (action === 'edit')   { openEditModal(id, term, code); }
-            if (action === 'delete') { openDeleteConfirm(id, term); }
-        });
-    }
-
-    // Bouton "Ajouter une règle"
-    var btnAddCodif = document.getElementById('btn-add-codification');
-    if (btnAddCodif) {
-        btnAddCodif.addEventListener('click', function () { openAddModal(); });
-    }
-
-    function openAddModal() {
-        if (!window.Swal) { return; }
-        Swal.fire({
-            title: '<i class="fa-solid fa-plus-circle text-primary me-2"></i>Ajouter une règle',
-            html:
-                '<div class="mb-3 text-start">' +
-                    '<label class="form-label fw-semibold">Terme sensible</label>' +
-                    '<input id="swal-term" class="form-control" placeholder="Ex: Groupe armé M23">' +
-                '</div>' +
-                '<div class="text-start">' +
-                    '<label class="form-label fw-semibold">Code de remplacement</label>' +
-                    '<input id="swal-code" class="form-control" placeholder="Ex: GA001">' +
-                '</div>',
-            showCancelButton: true,
-            confirmButtonText: '<i class="fa-solid fa-save me-1"></i>Enregistrer',
-            cancelButtonText: 'Annuler',
-            confirmButtonColor: '#005BBB',
-            focusConfirm: false,
-            preConfirm: function () {
-                var term = String(document.getElementById('swal-term').value || '').trim();
-                var code = String(document.getElementById('swal-code').value || '').trim();
-                if (!term || !code) {
-                    Swal.showValidationMessage('Les deux champs sont obligatoires.');
-                    return false;
-                }
-                return { term: term, code: code };
+    if (editForm) {
+        editForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            if (!editForm.checkValidity()) {
+                editForm.classList.add('was-validated');
+                return;
             }
-        }).then(function (result) {
-            if (!result.isConfirmed) { return; }
-            callApi(codifUrl, { action: 'add', term: result.value.term, code: result.value.code })
-                .then(function (data) {
-                    if (!data || data.ok !== true) { throw new Error(data.message || 'Erreur'); }
-                    showToast('success', 'Règle ajoutée avec succès');
-                    loadCodificationTable();
-                })
-                .catch(function (err) { showToast('error', err.message); });
-        });
-    }
 
-    function openEditModal(id, term, code) {
-        if (!window.Swal) { return; }
-        Swal.fire({
-            title: '<i class="fa-solid fa-pen text-primary me-2"></i>Modifier la règle',
-            html:
-                '<div class="mb-3 text-start">' +
-                    '<label class="form-label fw-semibold">Terme sensible</label>' +
-                    '<input id="swal-term" class="form-control" value="' + term.replace(/"/g, '&quot;') + '">' +
-                '</div>' +
-                '<div class="text-start">' +
-                    '<label class="form-label fw-semibold">Code de remplacement</label>' +
-                    '<input id="swal-code" class="form-control" value="' + code.replace(/"/g, '&quot;') + '">' +
-                '</div>',
-            showCancelButton: true,
-            confirmButtonText: '<i class="fa-solid fa-save me-1"></i>Enregistrer',
-            cancelButtonText: 'Annuler',
-            confirmButtonColor: '#005BBB',
-            focusConfirm: false,
-            preConfirm: function () {
-                var newTerm = String(document.getElementById('swal-term').value || '').trim();
-                var newCode = String(document.getElementById('swal-code').value || '').trim();
-                if (!newTerm || !newCode) {
-                    Swal.showValidationMessage('Les deux champs sont obligatoires.');
-                    return false;
+            editSubmitBtn.disabled = true;
+            editSubmitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>Enregistrement...';
+            editAlert.classList.add('d-none');
+
+            const idVal = document.getElementById('edit-rule-id').value;
+            const termVal = document.getElementById('edit-term').value.trim();
+            const codeVal = document.getElementById('edit-code').value.trim();
+            const activeVal = document.getElementById('edit-active').value;
+
+            $.ajax({
+                url: 'api/edit_codification_rule.php',
+                type: 'POST',
+                data: {
+                    id: idVal,
+                    term: termVal,
+                    replacement_code: codeVal,
+                    is_active: activeVal,
+                    csrf: csrfToken
+                },
+                dataType: 'json',
+                success: function (res) {
+                    editSubmitBtn.disabled = false;
+                    editSubmitBtn.innerHTML = '<i class="fa-solid fa-check me-1"></i>Enregistrer les modifications';
+
+                    if (res && res.success === true) {
+                        if (typeof toastr !== 'undefined') {
+                            toastr.success(res.message || 'Règle modifiée avec succès.');
+                        }
+                        
+                        if (window.bootstrap && window.bootstrap.Modal) {
+                            const modal = window.bootstrap.Modal.getInstance(editModalEl) || new window.bootstrap.Modal(editModalEl);
+                            modal.hide();
+                        }
+                        
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1000);
+                    } else {
+                        editAlertText.textContent = res.message || 'Une erreur est survenue.';
+                        editAlert.classList.remove('d-none');
+                    }
+                },
+                error: function (xhr, status, error) {
+                    editSubmitBtn.disabled = false;
+                    editSubmitBtn.innerHTML = '<i class="fa-solid fa-check me-1"></i>Enregistrer les modifications';
+                    editAlertText.textContent = 'Erreur réseau : ' + error;
+                    editAlert.classList.remove('d-none');
                 }
-                return { term: newTerm, code: newCode };
-            }
-        }).then(function (result) {
-            if (!result.isConfirmed) { return; }
-            callApi(codifUrl, { action: 'update', id: id, term: result.value.term, code: result.value.code })
-                .then(function (data) {
-                    if (!data || data.ok !== true) { throw new Error(data.message || 'Erreur'); }
-                    showToast('success', 'Règle modifiée avec succès');
-                    loadCodificationTable();
-                })
-                .catch(function (err) { showToast('error', err.message); });
+            });
         });
     }
 
-    function openDeleteConfirm(id, term) {
-        if (!window.Swal) { return; }
-        Swal.fire({
-            icon: 'warning',
-            title: 'Supprimer cette règle ?',
-            html: 'Le terme <strong>' + term + '</strong> sera définitivement supprimé.',
-            showCancelButton: true,
-            confirmButtonText: '<i class="fa-solid fa-trash me-1"></i>Supprimer',
-            cancelButtonText: 'Annuler',
-            confirmButtonColor: '#e74c3c',
-        }).then(function (result) {
-            if (!result.isConfirmed) { return; }
-            callApi(codifUrl, { action: 'delete', id: id })
-                .then(function (data) {
-                    if (!data || data.ok !== true) { throw new Error(data.message || 'Erreur'); }
-                    showToast('success', 'Règle supprimée');
-                    loadCodificationTable();
-                })
-                .catch(function (err) { showToast('error', err.message); });
+    // --- GESTION DE LA SUPPRESSION ---
+    let deleteRuleId = null;
+    const deleteModalEl = document.getElementById('deleteRuleModal');
+    const deleteConfirmBtn = document.getElementById('btnConfirmDeleteRule');
+    const deleteAlert = document.getElementById('deleteModalAlert');
+    const deleteAlertText = document.getElementById('deleteModalAlertText');
+
+    // Délégation d'événement pour le bouton de suppression (compatible DataTables)
+    $('#rules-table').on('click', '.js-delete-rule-btn', function () {
+        deleteRuleId = $(this).data('id');
+        const term = $(this).data('term');
+
+        document.getElementById('delete-rule-term').textContent = term;
+        deleteAlert.classList.add('d-none');
+
+        if (window.bootstrap && window.bootstrap.Modal) {
+            const modal = window.bootstrap.Modal.getInstance(deleteModalEl) || new window.bootstrap.Modal(deleteModalEl);
+            modal.show();
+        }
+    });
+
+    if (deleteConfirmBtn) {
+        deleteConfirmBtn.addEventListener('click', function () {
+            if (!deleteRuleId) return;
+
+            deleteConfirmBtn.disabled = true;
+            deleteConfirmBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>Suppression...';
+            deleteAlert.classList.add('d-none');
+
+            $.ajax({
+                url: 'api/delete_codification_rule.php',
+                type: 'POST',
+                data: {
+                    id: deleteRuleId,
+                    csrf: csrfToken
+                },
+                dataType: 'json',
+                success: function (res) {
+                    deleteConfirmBtn.disabled = false;
+                    deleteConfirmBtn.innerHTML = '<i class="fa-solid fa-trash-can me-1"></i>Supprimer définitivement';
+
+                    if (res && res.success === true) {
+                        if (typeof toastr !== 'undefined') {
+                            toastr.success(res.message || 'Règle supprimée avec succès.');
+                        }
+                        
+                        if (window.bootstrap && window.bootstrap.Modal) {
+                            const modal = window.bootstrap.Modal.getInstance(deleteModalEl) || new window.bootstrap.Modal(deleteModalEl);
+                            modal.hide();
+                        }
+                        
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1000);
+                    } else {
+                        deleteAlertText.textContent = res.message || 'Une erreur est survenue.';
+                        deleteAlert.classList.remove('d-none');
+                    }
+                },
+                error: function (xhr, status, error) {
+                    deleteConfirmBtn.disabled = false;
+                    deleteConfirmBtn.innerHTML = '<i class="fa-solid fa-trash-can me-1"></i>Supprimer définitivement';
+                    deleteAlertText.textContent = 'Erreur réseau : ' + error;
+                    deleteAlert.classList.remove('d-none');
+                }
+            });
         });
     }
 
@@ -740,6 +1238,6 @@ $hasAnyTab = $canSeeIaSystem || $canSeeSecurity || $canSeeBusiness;
     }
 
     loadSettings();
-})();
+});
 </script>
 
