@@ -96,7 +96,7 @@ try {
 .ai-compose-shell {
     border: 1px solid #e2e8f0 !important;
     overflow: hidden;
-    height: calc(100vh - 120px);
+    height: calc(100dvh - 120px);
     display: flex;
     flex-direction: column;
 }

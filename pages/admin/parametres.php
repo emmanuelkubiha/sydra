@@ -901,6 +901,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ── Initialisation des tables de codification ─────────────────────────
     if (pageAccess.canSecurity && window.$ && $.fn.DataTable) {
         $('#rules-table').DataTable({
+            responsive: true,
             language: {
                 emptyTable: "Aucune règle disponible dans le dictionnaire",
                 info: "Affichage de la règle _START_ à _END_ sur _TOTAL_ règles",
@@ -922,6 +923,7 @@ document.addEventListener('DOMContentLoaded', () => {
             lengthMenu: [10, 25, 50]
         });
         $('#logs-table').DataTable({
+            responsive: true,
             language: {
                 emptyTable: "Aucune interception récente dans l'audit",
                 info: "Affichage du log _START_ à _END_ sur _TOTAL_ logs",

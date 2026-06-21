@@ -20,7 +20,7 @@ body {
 .app-shell {
     display: grid;
     grid-template-columns: 270px 1fr;
-    min-height: 100vh;
+    min-height: 100dvh;
 }
 
 .sidebar-left {
@@ -2017,7 +2017,7 @@ small.muted { color: var(--text-muted); }
         top: 0;
         left: 0;
         width: min(86vw, 320px);
-        height: 100vh;
+        height: 100dvh;
         z-index: 4000;
         transform: translateX(-105%);
         transition: transform .25s ease;
@@ -2368,5 +2368,71 @@ html, body {
     border-color: #0d6efd;
     transform: translateY(-1px);
 }
+
+/* ============================================================
+   MOBILE-FIRST NATIVE APP FIXES (Anti-Zoom & Anti-Overflow)
+   ============================================================ */
+
+html, body {
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden !important;
+    position: relative;
+    -webkit-text-size-adjust: 100%;
+    overscroll-behavior-y: none; /* Bloque le pull-to-refresh sur Chrome/Android */
+}
+
+/* S'assurer que le contenu principal est le seul à scroller */
+.content-wrapper, .main-panel {
+    height: 100dvh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+
+/* Forcer la coupure des mots trop longs pour ne pas casser l'écran */
+* {
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+}
+
+/* Forcer les images et vidéos à être responsives */
+img, video {
+    max-width: 100%;
+    height: auto;
+}
+
+/* Verrouiller le panneau IA Offcanvas sur mobile */
+.offcanvas {
+    max-width: 100vw !important; /* Le chat ne doit JAMAIS dépasser l'écran */
+}
+
+/* Sécuriser le conteneur de la carte Leaflet */
+#map, .leaflet-container {
+    width: 100% !important;
+    max-width: 100vw !important;
+    overflow: hidden !important;
+}
+
+/* Empêcher le zoom automatique des téléphones sur les champs de saisie */
+@media screen and (max-width: 768px) {
+    input, textarea, select, .form-control, .form-select {
+        font-size: 16px !important; /* Règle d'or absolue pour éviter le zoom iOS/Android */
+        max-width: 100%;
+    }
+}
+
+/* S'assurer que TOUS les tableaux DataTables défilent en interne et ne poussent pas la page */
+.table-responsive {
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch; /* Défilement tactile fluide */
+}
+table.dataTable {
+    width: 100% !important;
+    max-width: 100% !important;
+}
+
 
 

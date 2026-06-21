@@ -484,6 +484,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var usersTable = document.getElementById('users-table');
         if (usersTable) {
             var usersDataTable = window.jQuery(usersTable).DataTable({
+                responsive: true,
                 pageLength: 10,
                 order: [[1, 'asc']],
                 dom: 'rt<"users-table-footer"lip>',
@@ -546,6 +547,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var leadTable = document.getElementById('lead-alert-table');
         if (leadTable) {
             window.jQuery(leadTable).DataTable({
+                responsive: true,
                 pageLength: 10,
                 order: [[5, 'desc']]
             });
