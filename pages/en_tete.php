@@ -305,7 +305,7 @@ if ($isAuth) {
     <button type="button" class="sidebar-mobile-overlay" id="sidebar-mobile-overlay" aria-hidden="true" tabindex="-1"></button>
 
     <main class="main-panel">
-        <header class="topbar-adminlte">
+        <header class="topbar-adminlte flex-nowrap">
             <div class="topbar-left">
                 <button
                     type="button"
@@ -405,7 +405,7 @@ if ($isAuth) {
                 </div>
 
                 <div class="profile-dropdown" id="profile-dropdown-wrapper">
-                    <button type="button" class="topbar-user org-topbar-user profile-dropdown-toggle" id="profile-dropdown-toggle" aria-label="Menu profil" aria-expanded="false">
+                    <button type="button" class="topbar-user org-topbar-user profile-dropdown-toggle d-flex align-items-center overflow-hidden" id="profile-dropdown-toggle" aria-label="Menu profil" aria-expanded="false">
                         <?php if ($orgLogoPath !== ''): ?>
                             <img
                                 src="<?= htmlspecialchars($orgLogoPath, ENT_QUOTES, 'UTF-8'); ?>"
@@ -417,7 +417,7 @@ if ($isAuth) {
                         <?php else: ?>
                             <span class="org-avatar-fallback rounded-circle"><?= htmlspecialchars($orgInitials, ENT_QUOTES, 'UTF-8'); ?></span>
                         <?php endif; ?>
-                        <span class="org-topbar-name"><?= htmlspecialchars($orgDisplayName, ENT_QUOTES, 'UTF-8'); ?></span>
+                        <span class="org-topbar-name text-truncate ms-2"><?= htmlspecialchars($orgDisplayName, ENT_QUOTES, 'UTF-8'); ?></span>
                         <i class="bi bi-chevron-down profile-caret" aria-hidden="true"></i>
                     </button>
 
